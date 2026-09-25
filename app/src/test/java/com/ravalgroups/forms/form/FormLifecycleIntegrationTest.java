@@ -5,9 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.ravalgroups.forms.TestcontainersConfiguration;
+import com.ravalgroups.forms.authorization.FormsAuthorizationService;
 import com.ravalgroups.forms.authorization.FormsRoleCode;
-import com.ravalgroups.forms.authorization.adapter.out.persistence.FormsRoleAssignmentEntity;
-import com.ravalgroups.forms.authorization.adapter.out.persistence.FormsRoleAssignmentJpaRepository;
+import com.ravalgroups.forms.authorization.adapter.out.persistence.FormsRoleJpaRepository;
+import com.ravalgroups.forms.authorization.adapter.out.persistence.FormsUserRoleEntity;
+import com.ravalgroups.forms.authorization.adapter.out.persistence.FormsUserRoleJpaRepository;
 import com.ravalgroups.forms.form.application.FormApplicationService;
 import com.ravalgroups.forms.form.application.FormApplicationService.CreateFormCommand;
 import com.ravalgroups.forms.form.application.FormApplicationService.CreateVersionCommand;
@@ -66,7 +68,13 @@ class FormLifecycleIntegrationTest {
     ResponseApplicationService responses;
 
     @Autowired
-    FormsRoleAssignmentJpaRepository roles;
+    FormsAuthorizationService authz;
+
+    @Autowired
+    FormsRoleJpaRepository roles;
+
+    @Autowired
+    FormsUserRoleJpaRepository userRoles;
 
     private CurrentUser actor;
 
@@ -75,8 +83,10 @@ class FormLifecycleIntegrationTest {
         UUID companyId = UuidV7.create();
         UUID userId = UuidV7.create();
         actor = new CurrentUser(userId, companyId, "EMP-1", "forms", "sid", 0L, "web");
-        roles.save(FormsRoleAssignmentEntity.create(
-                UuidV7.create(), companyId, userId, FormsRoleCode.ADMIN, Instant.now()));
+        authz.ensureSystemRoles(companyId);
+        var admin = roles.findByCompanyIdAndCode(companyId, FormsRoleCode.ADMIN).orElseThrow();
+        userRoles.save(FormsUserRoleEntity.create(
+                UuidV7.create(), companyId, userId, admin.getId(), Instant.now()));
     }
 
     @Test

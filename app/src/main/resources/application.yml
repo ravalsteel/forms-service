@@ -138,6 +138,9 @@ forms:
     application-code: ${FORMS_APPLICATION_CODE:forms}
     service-bearer-token: ${IAM_SERVICE_BEARER_TOKEN:}
 
+  role-bridge:
+    secret: ${IAM_ROLE_BRIDGE_SECRET:}
+
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:}
     allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}

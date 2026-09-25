@@ -5,7 +5,6 @@ import com.ravalgroups.forms.security.CurrentUser;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.UUID;
@@ -46,7 +45,8 @@ public class RoleAssignmentController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public RoleAssignmentApplicationService.RoleAssignmentView assign(@Valid @RequestBody AssignRequest request) {
-        return roles.assign(CurrentUser.require(), request.iamUserId(), request.roleCode());
+        return roles.assign(
+                CurrentUser.require(), request.iamUserId(), request.roleId(), request.roleCode());
     }
 
     @PostMapping("/bootstrap")
@@ -57,9 +57,15 @@ public class RoleAssignmentController {
 
     @DeleteMapping("/users/{iamUserId}/{roleCode}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void revoke(@PathVariable UUID iamUserId, @PathVariable String roleCode) {
-        roles.revoke(CurrentUser.require(), iamUserId, roleCode);
+    public void revokeByCode(@PathVariable UUID iamUserId, @PathVariable String roleCode) {
+        roles.revoke(CurrentUser.require(), iamUserId, null, roleCode);
     }
 
-    public record AssignRequest(@NotNull UUID iamUserId, @NotBlank String roleCode) {}
+    @DeleteMapping("/users/{iamUserId}/by-id/{roleId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void revokeById(@PathVariable UUID iamUserId, @PathVariable UUID roleId) {
+        roles.revoke(CurrentUser.require(), iamUserId, roleId, null);
+    }
+
+    public record AssignRequest(@NotNull UUID iamUserId, UUID roleId, String roleCode) {}
 }

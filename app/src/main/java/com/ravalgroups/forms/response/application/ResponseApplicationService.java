@@ -2,6 +2,7 @@ package com.ravalgroups.forms.response.application;
 
 import com.ravalgroups.forms.audit.application.DomainEventRecorder;
 import com.ravalgroups.forms.authorization.FormsAuthorizationService;
+import com.ravalgroups.forms.authorization.FormsPermissionCode;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionEntity;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionJpaRepository;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseAnswerEntity;
@@ -188,7 +189,7 @@ public class ResponseApplicationService {
 
     @Transactional
     public ResponseView anonymize(CurrentUser actor, UUID responseId) {
-        authz.requireAdmin(actor);
+        authz.requirePermission(actor, FormsPermissionCode.RESPONSES_ANONYMIZE);
         ResponseEntity entity = requireResponse(actor, responseId);
         if (entity.getAnonymizedAt() != null) {
             return toView(entity);
@@ -216,8 +217,11 @@ public class ResponseApplicationService {
 
     private void authorizeRead(CurrentUser actor, ResponseEntity entity) {
         if (entity.getRespondentMode() == RespondentMode.ANONYMOUS) {
-            if (authz.hasAnyRole(actor, com.ravalgroups.forms.authorization.FormsRoleCode.ANALYST_OR_ADMIN)
-                    || authz.hasAnyRole(actor, com.ravalgroups.forms.authorization.FormsRoleCode.PUBLISHER_OR_ADMIN)) {
+            if (authz.hasAnyPermission(
+                    actor,
+                    FormsPermissionCode.REPORTS_READ,
+                    FormsPermissionCode.RUNS_MANAGE,
+                    FormsPermissionCode.VERSIONS_PUBLISH)) {
                 return;
             }
             throw new DomainException("ANONYMOUS_RESPONSE_ACCESS_DENIED", "Cannot read anonymous response details");
@@ -225,9 +229,7 @@ public class ResponseApplicationService {
         if (actor.userId().equals(entity.getRespondentId())) {
             return;
         }
-        if (authz.hasAnyRole(actor, com.ravalgroups.forms.authorization.FormsRoleCode.ANALYST_OR_ADMIN)
-                || authz.hasAnyRole(actor, com.ravalgroups.forms.authorization.FormsRoleCode.PUBLISHER_OR_ADMIN)
-                || authz.hasAnyRole(actor, com.ravalgroups.forms.authorization.FormsRoleCode.DESIGNER_OR_ADMIN)) {
+        if (authz.hasPermission(actor, FormsPermissionCode.RESPONSES_READ)) {
             return;
         }
         throw new DomainException("FORBIDDEN", "Not permitted to read this response");

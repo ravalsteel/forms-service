@@ -1,6 +1,7 @@
 package com.ravalgroups.forms.file.application;
 
 import com.ravalgroups.forms.authorization.FormsAuthorizationService;
+import com.ravalgroups.forms.authorization.FormsPermissionCode;
 import com.ravalgroups.forms.file.adapter.out.persistence.StoredFileEntity;
 import com.ravalgroups.forms.file.adapter.out.persistence.StoredFileJpaRepository;
 import com.ravalgroups.forms.file.application.port.FileStoragePort;
@@ -64,8 +65,11 @@ public class FileApplicationService {
         StoredFileEntity entity = files.findByIdAndCompanyId(fileId, actor.companyId())
                 .orElseThrow(() -> new DomainException("NOT_FOUND", "File not found"));
         if (!entity.getCreatedBy().equals(actor.userId())
-                && !authz.hasAnyRole(actor, com.ravalgroups.forms.authorization.FormsRoleCode.ANALYST_OR_ADMIN)
-                && !authz.hasAnyRole(actor, com.ravalgroups.forms.authorization.FormsRoleCode.DESIGNER_OR_ADMIN)) {
+                && !authz.hasAnyPermission(
+                        actor,
+                        FormsPermissionCode.FILES_MANAGE,
+                        FormsPermissionCode.REPORTS_READ,
+                        FormsPermissionCode.VERSIONS_WRITE)) {
             throw new DomainException("FORBIDDEN", "Not permitted to download this file");
         }
         try {
@@ -84,7 +88,8 @@ public class FileApplicationService {
         StoredFileEntity entity = files.findByIdAndCompanyId(fileId, actor.companyId())
                 .orElseThrow(() -> new DomainException("NOT_FOUND", "File not found"));
         if (!entity.getCreatedBy().equals(actor.userId())
-                && !authz.hasAnyRole(actor, com.ravalgroups.forms.authorization.FormsRoleCode.DESIGNER_OR_ADMIN)) {
+                && !authz.hasAnyPermission(
+                        actor, FormsPermissionCode.FILES_MANAGE, FormsPermissionCode.VERSIONS_WRITE)) {
             throw new DomainException("FORBIDDEN", "Not permitted to delete this file");
         }
         try {

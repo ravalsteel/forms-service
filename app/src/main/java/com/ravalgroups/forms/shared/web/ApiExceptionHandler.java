@@ -109,7 +109,7 @@ public class ApiExceptionHandler {
                     "INVALID_ANSWER",
                     "INVALID_QUESTION_REFERENCE",
                     "EXPORT_NOT_READY" -> HttpStatus.UNPROCESSABLE_ENTITY;
-            case "UNAUTHENTICATED" -> HttpStatus.UNAUTHORIZED;
+            case "UNAUTHORIZED", "UNAUTHENTICATED" -> HttpStatus.UNAUTHORIZED;
             case "INVALID_PAGE", "INVALID_SIZE", "INVALID_SORT", "VALIDATION_ERROR" -> HttpStatus.BAD_REQUEST;
             default -> HttpStatus.BAD_REQUEST;
         };

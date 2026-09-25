@@ -4,10 +4,7 @@ import com.ravalgroups.forms.shared.exception.DomainException;
 import java.util.Locale;
 import java.util.Set;
 
-/**
- * Forms-local business roles. IAM grants application access; these roles govern
- * what the user may do inside Forms.
- */
+/** Well-known system role codes. Custom company roles may use any other code. */
 public final class FormsRoleCode {
 
     public static final String ADMIN = "ADMIN";
@@ -16,22 +13,19 @@ public final class FormsRoleCode {
     public static final String ANALYST = "ANALYST";
     public static final String RESPONDENT = "RESPONDENT";
 
-    public static final Set<String> ALL = Set.of(ADMIN, DESIGNER, PUBLISHER, ANALYST, RESPONDENT);
-    public static final Set<String> DESIGNER_OR_ADMIN = Set.of(ADMIN, DESIGNER);
-    public static final Set<String> PUBLISHER_OR_ADMIN = Set.of(ADMIN, PUBLISHER);
-    public static final Set<String> ANALYST_OR_ADMIN = Set.of(ADMIN, ANALYST);
-    public static final Set<String> ANY_ASSIGNED = Set.of(ADMIN, DESIGNER, PUBLISHER, ANALYST, RESPONDENT);
+    public static final Set<String> SYSTEM = Set.of(ADMIN, DESIGNER, PUBLISHER, ANALYST, RESPONDENT);
 
     private FormsRoleCode() {}
 
+    /** Uppercases and trims; does not restrict to system codes (custom roles allowed). */
     public static String normalize(String raw) {
         if (raw == null || raw.isBlank()) {
             throw new DomainException("VALIDATION_ERROR", "roleCode is required");
         }
-        String code = raw.trim().toUpperCase(Locale.ROOT);
-        if (!ALL.contains(code)) {
-            throw new DomainException("VALIDATION_ERROR", "Invalid roleCode. Allowed: " + ALL);
-        }
-        return code;
+        return raw.trim().toUpperCase(Locale.ROOT);
+    }
+
+    public static boolean isSystem(String code) {
+        return code != null && SYSTEM.contains(code.trim().toUpperCase(Locale.ROOT));
     }
 }

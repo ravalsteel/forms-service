@@ -44,6 +44,8 @@ public class SecurityConfiguration {
                         .permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
                         .permitAll()
+                        .requestMatchers("/api/v1/iam-bridge/**")
+                        .permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**")
                         .permitAll()
                         .anyRequest()

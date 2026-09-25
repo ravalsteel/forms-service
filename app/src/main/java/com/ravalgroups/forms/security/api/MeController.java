@@ -27,6 +27,9 @@ public class MeController {
     @Operation(summary = "Return the authenticated Forms service-token context")
     public MeResponse me() {
         CurrentUser user = CurrentUser.require();
+        if (user.hasCompanyContext()) {
+            authz.ensureSystemRoles(user.companyId());
+        }
         return new MeResponse(
                 user.userId(),
                 user.companyId(),
@@ -36,7 +39,8 @@ public class MeController {
                 user.authVersion(),
                 user.clientId(),
                 authz.isBootstrapOpen(user.companyId()),
-                authz.assignedRoleCodes(user));
+                authz.assignedRoleCodes(user),
+                authz.assignedPermissions(user));
     }
 
     public record MeResponse(
@@ -48,5 +52,6 @@ public class MeController {
             Long authVersion,
             String clientId,
             boolean bootstrapOpen,
-            List<String> roles) {}
+            List<String> roles,
+            List<String> permissions) {}
 }

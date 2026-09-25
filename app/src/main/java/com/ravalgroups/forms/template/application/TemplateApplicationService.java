@@ -2,6 +2,7 @@ package com.ravalgroups.forms.template.application;
 
 import com.ravalgroups.forms.audit.application.DomainEventRecorder;
 import com.ravalgroups.forms.authorization.FormsAuthorizationService;
+import com.ravalgroups.forms.authorization.FormsPermissionCode;
 import com.ravalgroups.forms.form.application.FormApplicationService;
 import com.ravalgroups.forms.form.definition.FormDefinitionValidator;
 import com.ravalgroups.forms.security.CurrentUser;
@@ -62,7 +63,7 @@ public class TemplateApplicationService {
         definitionValidator.parseAndValidate(command.definitionJson());
         TemplateScope scope = command.scope() == null ? TemplateScope.COMPANY : command.scope();
         if (scope == TemplateScope.GLOBAL) {
-            authz.requireAdmin(actor);
+            authz.requirePermission(actor, FormsPermissionCode.TEMPLATES_MANAGE_SYSTEM);
         }
         Instant now = Instant.now();
         FormTemplateEntity entity = templates.save(FormTemplateEntity.create(
@@ -137,7 +138,7 @@ public class TemplateApplicationService {
     private FormTemplateEntity requireOwned(CurrentUser actor, UUID templateId) {
         FormTemplateEntity entity = requireVisible(actor, templateId);
         if (entity.getScope() == TemplateScope.GLOBAL) {
-            authz.requireAdmin(actor);
+            authz.requirePermission(actor, FormsPermissionCode.TEMPLATES_MANAGE_SYSTEM);
             return entity;
         }
         return templates

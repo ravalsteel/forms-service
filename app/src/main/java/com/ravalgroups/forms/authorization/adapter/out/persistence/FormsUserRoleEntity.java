@@ -8,8 +8,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "forms_role_assignment")
-public class FormsRoleAssignmentEntity {
+@Table(name = "forms_user_role")
+public class FormsUserRoleEntity {
 
     @Id
     private UUID id;
@@ -20,21 +20,21 @@ public class FormsRoleAssignmentEntity {
     @Column(name = "iam_user_id", nullable = false)
     private UUID iamUserId;
 
-    @Column(name = "role_code", nullable = false, length = 64)
-    private String roleCode;
+    @Column(name = "role_id", nullable = false)
+    private UUID roleId;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    protected FormsRoleAssignmentEntity() {}
+    protected FormsUserRoleEntity() {}
 
-    public static FormsRoleAssignmentEntity create(
-            UUID id, UUID companyId, UUID iamUserId, String roleCode, Instant createdAt) {
-        FormsRoleAssignmentEntity e = new FormsRoleAssignmentEntity();
+    public static FormsUserRoleEntity create(
+            UUID id, UUID companyId, UUID iamUserId, UUID roleId, Instant createdAt) {
+        FormsUserRoleEntity e = new FormsUserRoleEntity();
         e.id = id;
         e.companyId = companyId;
         e.iamUserId = iamUserId;
-        e.roleCode = roleCode;
+        e.roleId = roleId;
         e.createdAt = createdAt;
         return e;
     }
@@ -51,8 +51,8 @@ public class FormsRoleAssignmentEntity {
         return iamUserId;
     }
 
-    public String getRoleCode() {
-        return roleCode;
+    public UUID getRoleId() {
+        return roleId;
     }
 
     public Instant getCreatedAt() {
