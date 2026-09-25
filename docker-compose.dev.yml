@@ -1,0 +1,80 @@
+# Forms development stack.
+# Shared deps (start first):
+#   cd ../cache-service && docker compose -f docker-compose.dev.yml up -d
+#   cd ../broker-service && docker compose -f docker-compose.dev.yml up -d
+# IAM (JWKS):
+#   cd ../identity/iam-service && docker compose -f docker-compose.dev.yml up -d
+#
+#   docker compose -f docker-compose.dev.yml up
+
+name: forms-dev
+
+services:
+  forms-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: forms
+      POSTGRES_USER: forms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-forms}
+    ports:
+      - "5435:5432"
+    volumes:
+      - forms_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forms -d forms"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  forms:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    depends_on:
+      forms-postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: development
+      SERVER_PORT: 8094
+      MANAGEMENT_SERVER_PORT: 8095
+      DATABASE_URL: jdbc:postgresql://forms-postgres:5432/forms
+      DATABASE_USERNAME: forms
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-forms}
+      REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379}
+      AMQP_URL: ${AMQP_URL:-amqp://raval:raval@host.docker.internal:5672}
+      IAM_ISSUER: ${IAM_ISSUER:-https://service-iam.localhost}
+      IAM_JWKS_URI: ${IAM_JWKS_URI:-http://host.docker.internal:8080/.well-known/jwks.json}
+      IAM_BASE_URL: ${IAM_BASE_URL:-http://host.docker.internal:8080}
+      FORMS_AUDIENCE: ${FORMS_AUDIENCE:-forms-api}
+      FORMS_APPLICATION_CODE: ${FORMS_APPLICATION_CODE:-forms}
+      IAM_SERVICE_BEARER_TOKEN: ${IAM_SERVICE_BEARER_TOKEN:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      NOTIFICATION_EMAIL_PROVIDER: ${NOTIFICATION_EMAIL_PROVIDER:-log}
+      NOTIFICATION_EMAIL_FROM: ${NOTIFICATION_EMAIL_FROM:-}
+      NOTIFICATION_EMAIL_FROM_NAME: ${NOTIFICATION_EMAIL_FROM_NAME:-Raval Forms}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://host.docker.internal:4318}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http}
+      OTEL_TRACES_EXPORT_ENABLED: ${OTEL_TRACES_EXPORT_ENABLED:-true}
+      OTEL_METRICS_EXPORT_ENABLED: ${OTEL_METRICS_EXPORT_ENABLED:-false}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parent-based-always-on}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      OTEL_JAVA_EXPORTER_OTLP_RETRY_DISABLED: ${OTEL_JAVA_EXPORTER_OTLP_RETRY_DISABLED:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${SERVER_PORT:-8094}:8094"
+      - "${MANAGEMENT_SERVER_PORT:-8095}:8095"
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8095/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
+volumes:
+  forms_postgres_data:

@@ -1,0 +1,176 @@
+spring:
+  application:
+    name: ravalgroups-forms
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5435/forms}
+    username: ${DATABASE_USERNAME:forms}
+    password: ${DATABASE_PASSWORD:forms}
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+  rabbitmq:
+    addresses: ${AMQP_URL:amqp://raval:raval@localhost:5672}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    fail-on-missing-locations: true
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:30s}
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 16MB
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SMTP_AUTH:true}
+          starttls:
+            enable: ${SMTP_STARTTLS:true}
+
+server:
+  port: ${SERVER_PORT:8094}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [${spring.application.name:},%X{traceId:-},%X{spanId:-},%X{requestId:-}] %logger{36} - %msg%n"
+  level:
+    org.springframework.web: INFO
+    org.springframework.security: WARN
+    io.opentelemetry.exporter: WARN
+    io.opentelemetry.sdk.trace.export: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+      group:
+        liveness:
+          include: ping,livenessState
+        readiness:
+          include: ping,readinessState,db,redis,rabbit
+  info:
+    env:
+      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  tracing:
+    enabled: true
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_ARG:1.0}
+    propagation:
+      type: w3c
+    baggage:
+      enabled: true
+      remote-fields: requestId
+      correlation:
+        fields: requestId
+    export:
+      otlp:
+        enabled: ${OTEL_TRACES_EXPORT_ENABLED:true}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: ravalgroups
+    tracing:
+      sampler: ${OTEL_TRACES_SAMPLER:parent-based-always-on}
+      export:
+        schedule-delay: ${OTEL_BSP_SCHEDULE_DELAY:5s}
+        max-queue-size: ${OTEL_BSP_MAX_QUEUE_SIZE:2048}
+        max-batch-size: ${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:512}
+        timeout: ${OTEL_BSP_EXPORT_TIMEOUT:5s}
+      export.otlp:
+        endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
+        transport: ${OTEL_EXPORTER_OTLP_PROTOCOL:http}
+        connect-timeout: ${OTEL_EXPORTER_OTLP_TIMEOUT:2s}
+        timeout: ${OTEL_EXPORTER_OTLP_TIMEOUT:5s}
+      limits:
+        max-attributes: 32
+        max-attribute-value-length: 256
+        max-events: 8
+  otlp:
+    metrics:
+      export:
+        enabled: ${OTEL_METRICS_EXPORT_ENABLED:false}
+        url: ${OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:http://localhost:4318/v1/metrics}
+        step: ${OTEL_METRIC_EXPORT_INTERVAL:60s}
+  observations:
+    key-values:
+      service: ravalgroups-forms
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+forms:
+  iam:
+    issuer: ${IAM_ISSUER:https://ravalgroups.com}
+    jwks-uri: ${IAM_JWKS_URI:http://localhost:8080/.well-known/jwks.json}
+    base-url: ${IAM_BASE_URL:http://localhost:8080}
+    audience: ${FORMS_AUDIENCE:forms-api}
+    application-code: ${FORMS_APPLICATION_CODE:forms}
+    service-bearer-token: ${IAM_SERVICE_BEARER_TOKEN:}
+
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+    allowed-methods: ${CORS_ALLOWED_METHODS:GET,POST,PUT,PATCH,DELETE,OPTIONS}
+    allowed-headers: ${CORS_ALLOWED_HEADERS:Authorization,Content-Type,X-Request-Id,Idempotency-Key,traceparent,tracestate,baggage}
+    allow-credentials: ${CORS_ALLOW_CREDENTIALS:true}
+  messaging:
+    domain-events-exchange: ${DOMAIN_EVENTS_EXCHANGE:domain.events}
+    iam-projection-queue: ${IAM_PROJECTION_QUEUE:forms.domain-events}
+  outbox:
+    poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:5000}
+  redis:
+    key-prefix: ${REDIS_KEY_PREFIX:forms:}
+  notification:
+    email:
+      provider: ${NOTIFICATION_EMAIL_PROVIDER:log}
+      from: ${NOTIFICATION_EMAIL_FROM:}
+      from-name: ${NOTIFICATION_EMAIL_FROM_NAME:Raval Forms}
+  file-storage:
+    provider: ${FILE_STORAGE_PROVIDER:local}
+    root: ${FILE_STORAGE_ROOT:./data/forms-files}
+    key-prefix: ${FILE_STORAGE_KEY_PREFIX:forms/}
+    r2:
+      account-id: ${R2_ACCOUNT_ID:}
+      access-key-id: ${R2_ACCESS_KEY_ID:}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+      bucket: ${R2_BUCKET:}
+      endpoint: ${R2_ENDPOINT:}
+      key-prefix: ${R2_KEY_PREFIX:forms/}
+  reporting:
+    default-min-aggregation-threshold: ${FORMS_MIN_AGGREGATION_THRESHOLD:5}
+  export:
+    poll-interval-ms: ${FORMS_EXPORT_POLL_INTERVAL_MS:5000}
+  invitation:
+    expire-poll-interval-ms: ${FORMS_INVITATION_EXPIRE_POLL_INTERVAL_MS:60000}
+  retention:
+    poll-interval-ms: ${FORMS_RETENTION_POLL_INTERVAL_MS:300000}

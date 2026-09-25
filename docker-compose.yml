@@ -1,0 +1,116 @@
+# Production-oriented compose. Shared Redis/RabbitMQ/OTel remain external platform services.
+name: forms
+
+services:
+  forms-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: forms
+      POSTGRES_USER: forms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - forms_postgres_data:/var/lib/postgresql/data
+    # DbGate / admin clients on the LAN. Override host port with POSTGRES_PUBLISH_PORT.
+    ports:
+      - "${POSTGRES_PUBLISH_BIND:-0.0.0.0}:${POSTGRES_PUBLISH_PORT:-5435}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forms -d forms"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  forms-backup:
+    build:
+      context: ./backup
+    profiles:
+      - backup
+    restart: unless-stopped
+    depends_on:
+      forms-postgres:
+        condition: service_healthy
+    environment:
+      TZ: UTC
+      PGHOST: forms-postgres
+      PGPORT: "5432"
+      PGUSER: forms
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: forms
+      BACKUP_PREFIX: forms
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_LOCAL_KEEP: ${BACKUP_LOCAL_KEEP:-2}
+      BACKUP_RECENT_KEEP_DAYS: ${BACKUP_RECENT_KEEP_DAYS:-7}
+      BACKUP_WEEKLY_KEEP_DAYS: ${BACKUP_WEEKLY_KEEP_DAYS:-28}
+      AGE_RECIPIENT: ${AGE_RECIPIENT:-}
+      AGE_IDENTITY_FILE: /run/secrets/backup_age
+      BACKUP_R2_ACCOUNT_ID: ${BACKUP_R2_ACCOUNT_ID:-${R2_ACCOUNT_ID:-}}
+      BACKUP_R2_ACCESS_KEY_ID: ${BACKUP_R2_ACCESS_KEY_ID:-}
+      BACKUP_R2_SECRET_ACCESS_KEY: ${BACKUP_R2_SECRET_ACCESS_KEY:-}
+      BACKUP_R2_BUCKET: ${BACKUP_R2_BUCKET:-}
+      BACKUP_R2_ENDPOINT: ${BACKUP_R2_ENDPOINT:-${R2_ENDPOINT:-}}
+    volumes:
+      - forms_postgres_backups:/backups
+      - ./secrets/backup/age.key:/run/secrets/backup_age:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  forms:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    depends_on:
+      forms-postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      SERVER_PORT: 8094
+      MANAGEMENT_SERVER_PORT: 8095
+      DATABASE_URL: jdbc:postgresql://forms-postgres:5432/forms
+      DATABASE_USERNAME: forms
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PASSWORD}@redis.${ROOT_DOMAIN:?Set ROOT_DOMAIN}:6379}
+      AMQP_URL: ${AMQP_URL:-amqp://raval:${RABBITMQ_DEFAULT_PASS}@rabbit.${ROOT_DOMAIN}:5672}
+      SPRING_RABBITMQ_ADDRESSES: ${AMQP_URL:-amqp://raval:${RABBITMQ_DEFAULT_PASS}@rabbit.${ROOT_DOMAIN}:5672}
+      IAM_ISSUER: ${IAM_ISSUER:-https://service-iam.${ROOT_DOMAIN:?Set ROOT_DOMAIN}}
+      IAM_JWKS_URI: ${IAM_JWKS_URI:-https://service-iam.${ROOT_DOMAIN}/.well-known/jwks.json}
+      IAM_BASE_URL: ${IAM_BASE_URL:-https://service-iam.${ROOT_DOMAIN}}
+      FORMS_AUDIENCE: ${FORMS_AUDIENCE:-forms-api}
+      FORMS_APPLICATION_CODE: ${FORMS_APPLICATION_CODE:-forms}
+      IAM_SERVICE_BEARER_TOKEN: ${IAM_SERVICE_BEARER_TOKEN:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://forms.${FRONTEND_ROOT_DOMAIN:-ravalgroups.com}}
+      NOTIFICATION_EMAIL_PROVIDER: ${NOTIFICATION_EMAIL_PROVIDER:-log}
+      NOTIFICATION_EMAIL_FROM: ${NOTIFICATION_EMAIL_FROM:-noreply@${ROOT_DOMAIN}}
+      NOTIFICATION_EMAIL_FROM_NAME: ${NOTIFICATION_EMAIL_FROM_NAME:-Raval Forms}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-https://otel.${ROOT_DOMAIN}}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http}
+      OTEL_TRACES_EXPORT_ENABLED: ${OTEL_TRACES_EXPORT_ENABLED:-true}
+      OTEL_METRICS_EXPORT_ENABLED: ${OTEL_METRICS_EXPORT_ENABLED:-false}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parent-based-trace-id-ratio}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${SERVER_PORT:-8094}:8094"
+      - "${DOCKER_GATEWAY:-172.17.0.1}:${SERVER_PORT:-8094}:8094"
+      - "127.0.0.1:${MANAGEMENT_SERVER_PORT:-8095}:8095"
+    stop_grace_period: 30s
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8095/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+volumes:
+  forms_postgres_data:
+  forms_postgres_backups:
