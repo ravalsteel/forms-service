@@ -97,8 +97,12 @@ services:
       OTEL_METRICS_EXPORT_ENABLED: ${OTEL_METRICS_EXPORT_ENABLED:-false}
       OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parent-based-trace-id-ratio}
       OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.2}
+      FILE_STORAGE_PROVIDER: ${FILE_STORAGE_PROVIDER:-local}
+      FILE_STORAGE_ROOT: ${FILE_STORAGE_ROOT:-/var/lib/forms-files}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - forms_local_files:/var/lib/forms-files
     ports:
       - "127.0.0.1:${SERVER_PORT:-8094}:8094"
       - "${DOCKER_GATEWAY:-172.17.0.1}:${SERVER_PORT:-8094}:8094"
@@ -115,3 +119,4 @@ services:
 volumes:
   forms_postgres_data:
   forms_postgres_backups:
+  forms_local_files:
