@@ -46,6 +46,8 @@ public class SecurityConfiguration {
                         .permitAll()
                         .requestMatchers("/api/v1/iam-bridge/**")
                         .permitAll()
+                        .requestMatchers("/api/v1/public/**")
+                        .permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**")
                         .permitAll()
                         .anyRequest()

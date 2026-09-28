@@ -30,7 +30,7 @@ Draft PATCH requires `expectedRevision`.
 - `POST /responses/{responseId}/submit` (body may include `formVersionId`)
 - `POST /responses/{responseId}/anonymize`
 
-## Reporting / exports / files / invitations
+## Reporting / exports / files / invitations / share links
 
 - `GET /runs/{runId}/summary`
 - `GET /runs/{runId}/questions/{questionId}/results`
@@ -39,7 +39,16 @@ Draft PATCH requires `expectedRevision`.
 - `GET/POST /runs/{runId}/invitations`
 - `POST /invitations/{id}/revoke`
 - `POST /invitations/consume` (token; requires Forms JWT for eligibility)
+- `GET/POST /runs/{runId}/share-links` (publisher; **ANONYMOUS runs only**; raw token returned once)
+- `POST /share-links/{id}/revoke`
 
-## Roles
+## Public share fill (no JWT)
 
-`ADMIN`, `DESIGNER`, `PUBLISHER`, `ANALYST`, `RESPONDENT` via `/api/v1/roles` (+ `/bootstrap`).
+Multi-use anonymous collection via a share token. Portal URL shape: `/s/{token}`.
+
+- `GET /public/share/{token}` — run metadata + published definition (no company secrets)
+- `POST /public/share/{token}/responses` (+ optional `Idempotency-Key`)
+- `PATCH /public/share/{token}/responses/{responseId}`
+- `POST /public/share/{token}/responses/{responseId}/submit`
+
+Requires an **OPEN** run with `respondentMode=ANONYMOUS`, an **ACTIVE** (non-expired) share link, and optional `maxResponses` cap. Soft Redis rate limit applies.

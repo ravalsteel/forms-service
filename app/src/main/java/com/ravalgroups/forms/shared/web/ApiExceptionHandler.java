@@ -85,11 +85,13 @@ public class ApiExceptionHandler {
                     "TEMPLATE_NOT_FOUND",
                     "EXPORT_NOT_FOUND",
                     "INVITATION_NOT_FOUND",
+                    "SHARE_LINK_NOT_FOUND",
                     "ROLE_NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "FORBIDDEN",
                     "CROSS_COMPANY_ACCESS_DENIED",
                     "ANONYMOUS_RESPONSE_ACCESS_DENIED",
                     "COMPANY_CONTEXT_REQUIRED" -> HttpStatus.FORBIDDEN;
+            case "RATE_LIMITED" -> HttpStatus.TOO_MANY_REQUESTS;
             case "CONFLICT",
                     "CONCURRENT_MODIFICATION",
                     "FORM_VERSION_CONCURRENT_MODIFICATION",
@@ -98,6 +100,10 @@ public class ApiExceptionHandler {
                     "FORM_RUN_NOT_OPEN",
                     "RESPONSE_ALREADY_SUBMITTED",
                     "IDEMPOTENCY_KEY_REUSED",
+                    "SHARE_LINK_FULL",
+                    "SHARE_LINK_REVOKED",
+                    "SHARE_LINK_EXPIRED",
+                    "SHARE_LINK_UNAVAILABLE",
                     "DUPLICATE",
                     "BOOTSTRAP_CLOSED",
                     "LAST_ADMIN",

@@ -5,5 +5,6 @@
 - Cross-company access → `CROSS_COMPANY_ACCESS_DENIED`.
 - Identity tokens (`aud=iam-auth`) are rejected.
 - Business authorization is local Forms roles, not IAM permission claims.
+- Public share endpoints under `/api/v1/public/**` are unauthenticated; capability is the raw share token (hashed at rest). Soft Redis rate limits apply.
 
 See also `IAM_INTEGRATION.md`.
