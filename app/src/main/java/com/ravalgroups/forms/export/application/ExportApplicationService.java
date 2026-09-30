@@ -9,6 +9,8 @@ import com.ravalgroups.forms.export.domain.ExportJobStatus;
 import com.ravalgroups.forms.file.adapter.out.persistence.StoredFileEntity;
 import com.ravalgroups.forms.file.adapter.out.persistence.StoredFileJpaRepository;
 import com.ravalgroups.forms.file.application.port.FileStoragePort;
+import com.ravalgroups.forms.form.application.FormAccessService;
+import com.ravalgroups.forms.form.domain.FormAccessLevel;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseAnswerEntity;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseEntity;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseJpaRepository;
@@ -52,6 +54,7 @@ public class ExportApplicationService {
     private final FileStoragePort storage;
     private final StoredFileJpaRepository files;
     private final FormsAuthorizationService authz;
+    private final FormAccessService formAccess;
     private final DomainEventRecorder events;
     private final ObjectMapper objectMapper;
 
@@ -62,6 +65,7 @@ public class ExportApplicationService {
             FileStoragePort storage,
             StoredFileJpaRepository files,
             FormsAuthorizationService authz,
+            FormAccessService formAccess,
             DomainEventRecorder events,
             ObjectMapper objectMapper) {
         this.exports = exports;
@@ -70,6 +74,7 @@ public class ExportApplicationService {
         this.storage = storage;
         this.files = files;
         this.authz = authz;
+        this.formAccess = formAccess;
         this.events = events;
         this.objectMapper = objectMapper;
     }
@@ -78,6 +83,7 @@ public class ExportApplicationService {
     public ExportView create(CurrentUser actor, UUID runId, String formatRaw) {
         authz.requireAnalystOrAdmin(actor);
         FormRunEntity run = runs.requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.VIEW);
         if (run.getRespondentMode() == RespondentMode.ANONYMOUS) {
             throw new DomainException(
                     "ANONYMOUS_RESPONSE_ACCESS_DENIED", "Raw anonymous response export is not permitted");

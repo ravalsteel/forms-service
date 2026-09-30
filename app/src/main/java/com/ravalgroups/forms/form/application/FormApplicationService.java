@@ -7,6 +7,7 @@ import com.ravalgroups.forms.form.adapter.out.persistence.FormJpaRepository;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionEntity;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionJpaRepository;
 import com.ravalgroups.forms.form.definition.FormDefinitionValidator;
+import com.ravalgroups.forms.form.domain.FormAccessLevel;
 import com.ravalgroups.forms.form.domain.FormStatus;
 import com.ravalgroups.forms.form.domain.FormVersionStatus;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseJpaRepository;
@@ -35,6 +36,7 @@ public class FormApplicationService {
     private final ResponseJpaRepository responses;
     private final FormDefinitionValidator definitionValidator;
     private final FormsAuthorizationService authz;
+    private final FormAccessService formAccess;
     private final DomainEventRecorder events;
 
     public FormApplicationService(
@@ -44,6 +46,7 @@ public class FormApplicationService {
             ResponseJpaRepository responses,
             FormDefinitionValidator definitionValidator,
             FormsAuthorizationService authz,
+            FormAccessService formAccess,
             DomainEventRecorder events) {
         this.forms = forms;
         this.versions = versions;
@@ -51,26 +54,22 @@ public class FormApplicationService {
         this.responses = responses;
         this.definitionValidator = definitionValidator;
         this.authz = authz;
+        this.formAccess = formAccess;
         this.events = events;
     }
 
     @Transactional(readOnly = true)
     public List<FormView> list(CurrentUser actor, String status) {
         authz.requireAssigned(actor);
-        List<FormEntity> rows;
-        if (status == null || status.isBlank()) {
-            rows = forms.findByCompanyIdOrderByUpdatedAtDesc(actor.companyId());
-        } else {
-            rows = forms.findByCompanyIdAndStatusOrderByUpdatedAtDesc(
-                    actor.companyId(), FormStatus.valueOf(status.trim().toUpperCase()));
-        }
-        return rows.stream().map(this::toFormView).toList();
+        return formAccess.listAccessibleForms(actor, status).stream()
+                .map(form -> toFormView(actor, form))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public FormView get(CurrentUser actor, UUID formId) {
         authz.requireAssigned(actor);
-        return toFormView(requireForm(actor, formId));
+        return toFormView(actor, requireForm(actor, formId, FormAccessLevel.VIEW));
     }
 
     @Transactional
@@ -96,13 +95,13 @@ public class FormApplicationService {
                 form.getId(),
                 "forms.form.created",
                 payload);
-        return toFormView(form);
+        return toFormView(actor, form);
     }
 
     @Transactional
     public FormView update(CurrentUser actor, UUID formId, UpdateFormCommand command) {
         authz.requireDesignerOrAdmin(actor);
-        FormEntity form = requireForm(actor, formId);
+        FormEntity form = requireForm(actor, formId, FormAccessLevel.EDIT);
         if (form.getStatus() == FormStatus.ARCHIVED) {
             throw new DomainException("INVALID_STATE", "Archived forms cannot be updated");
         }
@@ -116,13 +115,13 @@ public class FormApplicationService {
                 form.getId(),
                 "forms.form.updated",
                 basePayload(form));
-        return toFormView(form);
+        return toFormView(actor, form);
     }
 
     @Transactional
     public void delete(CurrentUser actor, UUID formId) {
         authz.requireDesignerOrAdmin(actor);
-        FormEntity form = requireForm(actor, formId);
+        FormEntity form = requireForm(actor, formId, FormAccessLevel.MANAGE);
         form.archive(Instant.now());
         forms.save(form);
         events.record(
@@ -138,7 +137,7 @@ public class FormApplicationService {
     @Transactional(readOnly = true)
     public List<FormVersionView> listVersions(CurrentUser actor, UUID formId) {
         authz.requireAssigned(actor);
-        requireForm(actor, formId);
+        requireForm(actor, formId, FormAccessLevel.VIEW);
         return versions.findByFormIdOrderByVersionNumberDesc(formId).stream()
                 .map(this::toVersionView)
                 .toList();
@@ -147,14 +146,14 @@ public class FormApplicationService {
     @Transactional(readOnly = true)
     public FormVersionView getVersion(CurrentUser actor, UUID formId, UUID versionId) {
         authz.requireAssigned(actor);
-        requireForm(actor, formId);
+        requireForm(actor, formId, FormAccessLevel.VIEW);
         return toVersionView(requireVersion(formId, versionId));
     }
 
     @Transactional
     public FormVersionView createVersion(CurrentUser actor, UUID formId, CreateVersionCommand command) {
         authz.requireDesignerOrAdmin(actor);
-        FormEntity form = requireForm(actor, formId);
+        FormEntity form = requireForm(actor, formId, FormAccessLevel.EDIT);
         if (form.getStatus() == FormStatus.ARCHIVED) {
             throw new DomainException("INVALID_STATE", "Cannot add versions to an archived form");
         }
@@ -183,7 +182,7 @@ public class FormApplicationService {
     @Transactional
     public WorkingCopyView openWorkingCopy(CurrentUser actor, UUID formId) {
         authz.requireDesignerOrAdmin(actor);
-        FormEntity form = requireForm(actor, formId);
+        FormEntity form = requireForm(actor, formId, FormAccessLevel.EDIT);
         if (form.getStatus() == FormStatus.ARCHIVED) {
             throw new DomainException("INVALID_STATE", "Archived questionnaires cannot be edited");
         }
@@ -244,7 +243,7 @@ public class FormApplicationService {
     public FormVersionView updateDraft(
             CurrentUser actor, UUID formId, UUID versionId, UpdateDraftCommand command) {
         authz.requireDesignerOrAdmin(actor);
-        requireForm(actor, formId);
+        requireForm(actor, formId, FormAccessLevel.EDIT);
         if (command.expectedRevision() == null) {
             throw new DomainException("VALIDATION_ERROR", "expectedRevision is required");
         }
@@ -258,7 +257,7 @@ public class FormApplicationService {
     @Transactional
     public FormVersionView publish(CurrentUser actor, UUID formId, UUID versionId) {
         authz.requirePublisherOrAdmin(actor);
-        requireForm(actor, formId);
+        requireForm(actor, formId, FormAccessLevel.MANAGE);
         FormVersionEntity version = requireVersion(formId, versionId);
         definitionValidator.parseAndValidate(version.getDefinitionJson());
         Instant now = Instant.now();
@@ -282,7 +281,7 @@ public class FormApplicationService {
     @Transactional
     public FormVersionView archiveVersion(CurrentUser actor, UUID formId, UUID versionId) {
         authz.requirePublisherOrAdmin(actor);
-        requireForm(actor, formId);
+        requireForm(actor, formId, FormAccessLevel.MANAGE);
         FormVersionEntity version = requireVersion(formId, versionId);
         version.archive(Instant.now());
         versions.save(version);
@@ -300,10 +299,16 @@ public class FormApplicationService {
         return toVersionView(version);
     }
 
+    /** Company-scoped lookup with at least VIEW access (default for read paths). */
     public FormEntity requireForm(CurrentUser actor, UUID formId) {
+        return requireForm(actor, formId, FormAccessLevel.VIEW);
+    }
+
+    public FormEntity requireForm(CurrentUser actor, UUID formId, FormAccessLevel minAccess) {
         FormEntity form = forms.findByIdAndCompanyId(formId, actor.companyId())
                 .orElseThrow(() -> new DomainException("FORM_NOT_FOUND", "Form not found"));
         authz.requireCompany(actor, form.getCompanyId());
+        formAccess.requireAtLeast(actor, form, minAccess);
         return form;
     }
 
@@ -335,7 +340,11 @@ public class FormApplicationService {
         return payload;
     }
 
-    private FormView toFormView(FormEntity e) {
+    private FormView toFormView(CurrentUser actor, FormEntity e) {
+        String myAccess = formAccess
+                .effectiveLevel(actor, e)
+                .map(Enum::name)
+                .orElse(null);
         return new FormView(
                 e.getId(),
                 e.getCompanyId(),
@@ -344,7 +353,8 @@ public class FormApplicationService {
                 e.getStatus().name(),
                 e.getCreatedBy(),
                 e.getCreatedAt(),
-                e.getUpdatedAt());
+                e.getUpdatedAt(),
+                myAccess);
     }
 
     private FormVersionView toVersionView(FormVersionEntity e) {
@@ -370,7 +380,8 @@ public class FormApplicationService {
             String status,
             UUID createdBy,
             Instant createdAt,
-            Instant updatedAt) {}
+            Instant updatedAt,
+            String myAccessLevel) {}
 
     public record FormVersionView(
             UUID id,

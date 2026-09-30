@@ -2,6 +2,8 @@ package com.ravalgroups.forms.share.application;
 
 import com.ravalgroups.forms.audit.application.DomainEventRecorder;
 import com.ravalgroups.forms.authorization.FormsAuthorizationService;
+import com.ravalgroups.forms.form.application.FormAccessService;
+import com.ravalgroups.forms.form.domain.FormAccessLevel;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseJpaRepository;
 import com.ravalgroups.forms.response.domain.ResponseStatus;
 import com.ravalgroups.forms.run.adapter.out.persistence.FormRunEntity;
@@ -33,6 +35,7 @@ public class ShareLinkApplicationService {
     private final FormRunApplicationService runs;
     private final ResponseJpaRepository responses;
     private final FormsAuthorizationService authz;
+    private final FormAccessService formAccess;
     private final DomainEventRecorder events;
 
     public ShareLinkApplicationService(
@@ -40,18 +43,21 @@ public class ShareLinkApplicationService {
             FormRunApplicationService runs,
             ResponseJpaRepository responses,
             FormsAuthorizationService authz,
+            FormAccessService formAccess,
             DomainEventRecorder events) {
         this.shareLinks = shareLinks;
         this.runs = runs;
         this.responses = responses;
         this.authz = authz;
+        this.formAccess = formAccess;
         this.events = events;
     }
 
     @Transactional(readOnly = true)
     public List<ShareLinkView> list(CurrentUser actor, UUID runId) {
         authz.requirePublisherOrAdmin(actor);
-        runs.requireRun(actor, runId);
+        FormRunEntity run = runs.requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.MANAGE);
         Instant now = Instant.now();
         return shareLinks.findByCompanyIdAndFormRunIdOrderByCreatedAtDesc(actor.companyId(), runId).stream()
                 .map(link -> {
@@ -65,6 +71,7 @@ public class ShareLinkApplicationService {
     public CreatedShareLinkView create(CurrentUser actor, UUID runId, CreateShareLinkCommand command) {
         authz.requirePublisherOrAdmin(actor);
         FormRunEntity run = runs.requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.MANAGE);
         if (run.getRespondentMode() != RespondentMode.ANONYMOUS) {
             throw new DomainException(
                     "VALIDATION_ERROR",
@@ -113,7 +120,8 @@ public class ShareLinkApplicationService {
         ShareLinkEntity link = shareLinks
                 .findByIdAndCompanyId(shareLinkId, actor.companyId())
                 .orElseThrow(() -> new DomainException("SHARE_LINK_NOT_FOUND", "Share link not found"));
-        runs.requireRun(actor, link.getFormRunId());
+        FormRunEntity run = runs.requireRun(actor, link.getFormRunId());
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.MANAGE);
         Instant now = Instant.now();
         link.revoke(now);
         ShareLinkEntity saved = shareLinks.save(link);

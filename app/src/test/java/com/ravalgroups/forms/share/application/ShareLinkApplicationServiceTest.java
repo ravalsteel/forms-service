@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.ravalgroups.forms.audit.application.DomainEventRecorder;
 import com.ravalgroups.forms.authorization.FormsAuthorizationService;
+import com.ravalgroups.forms.form.application.FormAccessService;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseJpaRepository;
 import com.ravalgroups.forms.response.domain.ResponseStatus;
 import com.ravalgroups.forms.run.adapter.out.persistence.FormRunEntity;
@@ -43,6 +44,9 @@ class ShareLinkApplicationServiceTest {
     private FormsAuthorizationService authz;
 
     @Mock
+    private FormAccessService formAccess;
+
+    @Mock
     private DomainEventRecorder events;
 
     private ShareLinkApplicationService service;
@@ -54,7 +58,7 @@ class ShareLinkApplicationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ShareLinkApplicationService(shareLinks, runs, responses, authz, events);
+        service = new ShareLinkApplicationService(shareLinks, runs, responses, authz, formAccess, events);
     }
 
     @Test

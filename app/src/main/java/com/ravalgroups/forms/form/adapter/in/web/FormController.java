@@ -1,6 +1,8 @@
 package com.ravalgroups.forms.form.adapter.in.web;
 
 import com.ravalgroups.forms.form.application.FormApplicationService;
+import com.ravalgroups.forms.form.application.FormAccessService;
+import com.ravalgroups.forms.form.application.FormAccessService.AccessGrantView;
 import com.ravalgroups.forms.form.application.FormApplicationService.CreateFormCommand;
 import com.ravalgroups.forms.form.application.FormApplicationService.CreateVersionCommand;
 import com.ravalgroups.forms.form.application.FormApplicationService.FormView;
@@ -8,6 +10,7 @@ import com.ravalgroups.forms.form.application.FormApplicationService.FormVersion
 import com.ravalgroups.forms.form.application.FormApplicationService.UpdateDraftCommand;
 import com.ravalgroups.forms.form.application.FormApplicationService.UpdateFormCommand;
 import com.ravalgroups.forms.form.application.FormApplicationService.WorkingCopyView;
+import com.ravalgroups.forms.form.domain.FormAccessLevel;
 import com.ravalgroups.forms.security.CurrentUser;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,9 +38,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class FormController {
 
     private final FormApplicationService forms;
+    private final FormAccessService formAccess;
 
-    public FormController(FormApplicationService forms) {
+    public FormController(FormApplicationService forms, FormAccessService formAccess) {
         this.forms = forms;
+        this.formAccess = formAccess;
     }
 
     @GetMapping
@@ -120,6 +126,26 @@ public class FormController {
         return forms.archiveVersion(CurrentUser.require(), formId, versionId);
     }
 
+    @GetMapping("/{formId}/access")
+    public List<AccessGrantView> listAccess(@PathVariable UUID formId) {
+        return formAccess.listGrants(CurrentUser.require(), formId);
+    }
+
+    @PutMapping("/{formId}/access")
+    public AccessGrantView upsertAccess(@PathVariable UUID formId, @RequestBody UpsertAccessRequest request) {
+        return formAccess.upsertGrant(
+                CurrentUser.require(),
+                formId,
+                request.iamUserId(),
+                FormAccessLevel.parse(request.accessLevel()));
+    }
+
+    @DeleteMapping("/{formId}/access/{iamUserId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void revokeAccess(@PathVariable UUID formId, @PathVariable UUID iamUserId) {
+        formAccess.revokeGrant(CurrentUser.require(), formId, iamUserId);
+    }
+
     public record CreateFormRequest(String name, String description, String definitionJson) {}
 
     public record UpdateFormRequest(String name, String description) {}
@@ -127,4 +153,6 @@ public class FormController {
     public record CreateVersionRequest(UUID fromVersionId, String definitionJson) {}
 
     public record UpdateDraftRequest(@NotBlank String definitionJson, @NotNull Long expectedRevision) {}
+
+    public record UpsertAccessRequest(@NotNull UUID iamUserId, @NotBlank String accessLevel) {}
 }

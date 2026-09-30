@@ -11,6 +11,7 @@ import com.ravalgroups.forms.form.adapter.out.persistence.FormJpaRepository;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionEntity;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionJpaRepository;
 import com.ravalgroups.forms.form.definition.FormDefinitionValidator;
+import com.ravalgroups.forms.form.application.FormAccessService;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseJpaRepository;
 import com.ravalgroups.forms.run.adapter.out.persistence.FormRunJpaRepository;
 import com.ravalgroups.forms.security.CurrentUser;
@@ -45,6 +46,9 @@ class FormApplicationServiceRevisionTest {
     FormsAuthorizationService authz;
 
     @Mock
+    FormAccessService formAccess;
+
+    @Mock
     DomainEventRecorder events;
 
     FormApplicationService service;
@@ -55,7 +59,14 @@ class FormApplicationServiceRevisionTest {
     @BeforeEach
     void setUp() {
         service = new FormApplicationService(
-                forms, versions, runs, responses, new FormDefinitionValidator(new ObjectMapper()), authz, events);
+                forms,
+                versions,
+                runs,
+                responses,
+                new FormDefinitionValidator(new ObjectMapper()),
+                authz,
+                formAccess,
+                events);
         UUID companyId = UuidV7.create();
         UUID userId = UuidV7.create();
         actor = new CurrentUser(userId, companyId, "E1", "forms", "s", 0L, "web");

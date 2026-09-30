@@ -88,6 +88,7 @@ public class ApiExceptionHandler {
                     "SHARE_LINK_NOT_FOUND",
                     "ROLE_NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "FORBIDDEN",
+                    "FORM_ACCESS_DENIED",
                     "CROSS_COMPANY_ACCESS_DENIED",
                     "ANONYMOUS_RESPONSE_ACCESS_DENIED",
                     "COMPANY_CONTEXT_REQUIRED" -> HttpStatus.FORBIDDEN;

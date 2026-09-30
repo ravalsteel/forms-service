@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ravalgroups.forms.authorization.FormsAuthorizationService;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionEntity;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionJpaRepository;
+import com.ravalgroups.forms.form.application.FormAccessService;
 import com.ravalgroups.forms.form.definition.FormDefinitionValidator;
 import com.ravalgroups.forms.form.definition.FormDefinitionValidator.QuestionMeta;
+import com.ravalgroups.forms.form.domain.FormAccessLevel;
 import com.ravalgroups.forms.form.domain.QuestionTypes;
 import com.ravalgroups.forms.invitation.adapter.out.persistence.InvitationJpaRepository;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseAnswerEntity;
@@ -35,6 +37,7 @@ public class ReportingApplicationService {
     private final FormVersionJpaRepository versions;
     private final FormDefinitionValidator definitionValidator;
     private final FormsAuthorizationService authz;
+    private final FormAccessService formAccess;
     private final ObjectMapper objectMapper;
 
     public ReportingApplicationService(
@@ -44,6 +47,7 @@ public class ReportingApplicationService {
             FormVersionJpaRepository versions,
             FormDefinitionValidator definitionValidator,
             FormsAuthorizationService authz,
+            FormAccessService formAccess,
             ObjectMapper objectMapper) {
         this.runs = runs;
         this.responses = responses;
@@ -51,6 +55,7 @@ public class ReportingApplicationService {
         this.versions = versions;
         this.definitionValidator = definitionValidator;
         this.authz = authz;
+        this.formAccess = formAccess;
         this.objectMapper = objectMapper;
     }
 
@@ -58,6 +63,7 @@ public class ReportingApplicationService {
     public RunSummaryView summary(CurrentUser actor, UUID runId) {
         authz.requireAnalystOrAdmin(actor);
         FormRunEntity run = runs.requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.VIEW);
         long invited = invitations.countByFormRunId(runId);
         long started = responses.countByFormRunId(runId);
         long submitted = responses.countByFormRunIdAndStatus(runId, ResponseStatus.SUBMITTED);
@@ -69,6 +75,7 @@ public class ReportingApplicationService {
     public QuestionResultsView questionResults(CurrentUser actor, UUID runId, UUID questionId) {
         authz.requireAnalystOrAdmin(actor);
         FormRunEntity run = runs.requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.VIEW);
         FormVersionEntity version = versions
                 .findById(run.getFormVersionId())
                 .orElseThrow(() -> new DomainException("FORM_VERSION_NOT_FOUND", "Form version not found"));

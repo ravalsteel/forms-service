@@ -3,7 +3,9 @@ package com.ravalgroups.forms.run.application;
 import com.ravalgroups.forms.audit.application.DomainEventRecorder;
 import com.ravalgroups.forms.authorization.FormsAuthorizationService;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionEntity;
+import com.ravalgroups.forms.form.application.FormAccessService;
 import com.ravalgroups.forms.form.application.FormApplicationService;
+import com.ravalgroups.forms.form.domain.FormAccessLevel;
 import com.ravalgroups.forms.run.adapter.out.persistence.FormRunEntity;
 import com.ravalgroups.forms.run.adapter.out.persistence.FormRunJpaRepository;
 import com.ravalgroups.forms.run.domain.FormRunStatus;
@@ -25,6 +27,7 @@ public class FormRunApplicationService {
 
     private final FormRunJpaRepository runs;
     private final FormApplicationService forms;
+    private final FormAccessService formAccess;
     private final FormsAuthorizationService authz;
     private final DomainEventRecorder events;
     private final FormsReportingProperties reportingProperties;
@@ -32,11 +35,13 @@ public class FormRunApplicationService {
     public FormRunApplicationService(
             FormRunJpaRepository runs,
             FormApplicationService forms,
+            FormAccessService formAccess,
             FormsAuthorizationService authz,
             DomainEventRecorder events,
             FormsReportingProperties reportingProperties) {
         this.runs = runs;
         this.forms = forms;
+        this.formAccess = formAccess;
         this.authz = authz;
         this.events = events;
         this.reportingProperties = reportingProperties;
@@ -45,7 +50,7 @@ public class FormRunApplicationService {
     @Transactional(readOnly = true)
     public List<RunView> listForForm(CurrentUser actor, UUID formId) {
         authz.requireAssigned(actor);
-        forms.requireForm(actor, formId);
+        forms.requireForm(actor, formId, FormAccessLevel.VIEW);
         return runs.findByCompanyIdAndFormIdOrderByCreatedAtDesc(actor.companyId(), formId).stream()
                 .map(this::toView)
                 .toList();
@@ -54,13 +59,15 @@ public class FormRunApplicationService {
     @Transactional(readOnly = true)
     public RunView get(CurrentUser actor, UUID runId) {
         authz.requireAssigned(actor);
-        return toView(requireRun(actor, runId));
+        FormRunEntity run = requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.VIEW);
+        return toView(run);
     }
 
     @Transactional
     public RunView create(CurrentUser actor, UUID formId, CreateRunCommand command) {
         authz.requirePublisherOrAdmin(actor);
-        forms.requireForm(actor, formId);
+        forms.requireForm(actor, formId, FormAccessLevel.MANAGE);
         if (command.formVersionId() == null) {
             throw new DomainException("VALIDATION_ERROR", "formVersionId is required");
         }
@@ -105,6 +112,7 @@ public class FormRunApplicationService {
     public RunView open(CurrentUser actor, UUID runId) {
         authz.requirePublisherOrAdmin(actor);
         FormRunEntity run = requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.MANAGE);
         run.open(Instant.now());
         runs.save(run);
         events.record(
@@ -122,6 +130,7 @@ public class FormRunApplicationService {
     public RunView close(CurrentUser actor, UUID runId) {
         authz.requirePublisherOrAdmin(actor);
         FormRunEntity run = requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.MANAGE);
         run.close(Instant.now());
         runs.save(run);
         events.record(
@@ -139,11 +148,13 @@ public class FormRunApplicationService {
     public RunView cancel(CurrentUser actor, UUID runId) {
         authz.requirePublisherOrAdmin(actor);
         FormRunEntity run = requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.MANAGE);
         run.cancel(Instant.now());
         runs.save(run);
         return toView(run);
     }
 
+    /** Company-scoped run lookup without form ACL (respond paths). */
     public FormRunEntity requireRun(CurrentUser actor, UUID runId) {
         FormRunEntity run = runs.findByIdAndCompanyId(runId, actor.companyId())
                 .orElseThrow(() -> new DomainException("FORM_RUN_NOT_FOUND", "Form run not found"));
