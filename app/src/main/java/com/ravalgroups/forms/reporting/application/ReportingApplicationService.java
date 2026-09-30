@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -90,21 +91,85 @@ public class ReportingApplicationService {
                     true,
                     "Aggregation suppressed below min_aggregation_threshold",
                     Map.of(),
+                    null,
+                    null,
                     null);
         }
 
         Map<String, Long> distribution = new LinkedHashMap<>();
         Double avg = null;
+        Map<String, Map<String, Long>> matrixCells = null;
+        Map<String, Double> matrixRowAverages = null;
+
         if (QuestionTypes.isNumeric(meta.type())) {
             double sum = 0;
             int n = 0;
+            Map<String, Long> counts = new TreeMap<>((a, b) -> {
+                try {
+                    return Double.compare(Double.parseDouble(a), Double.parseDouble(b));
+                } catch (NumberFormatException ex) {
+                    return a.compareTo(b);
+                }
+            });
             for (ResponseAnswerEntity a : answers) {
                 if (a.getNumberValue() != null) {
-                    sum += a.getNumberValue();
+                    double value = a.getNumberValue();
+                    sum += value;
                     n++;
+                    String key = stripTrailingZero(value);
+                    counts.merge(key, 1L, Long::sum);
                 }
             }
             avg = n == 0 ? null : sum / n;
+            distribution.putAll(counts);
+        } else if (QuestionTypes.isMatrix(meta.type())) {
+            Map<String, Map<String, Long>> cells = new LinkedHashMap<>();
+            Map<String, Double> rowSums = new LinkedHashMap<>();
+            Map<String, Integer> rowCounts = new LinkedHashMap<>();
+            for (ResponseAnswerEntity a : answers) {
+                String json = a.getJsonValue();
+                if (json == null || json.isBlank()) {
+                    continue;
+                }
+                try {
+                    JsonNode root = objectMapper.readTree(json);
+                    JsonNode cellNode = root.path("cells");
+                    if (!cellNode.isObject()) {
+                        continue;
+                    }
+                    cellNode.fields().forEachRemaining(entry -> {
+                        String rowKey = entry.getKey();
+                        String colValue = entry.getValue().isNumber()
+                                ? stripTrailingZero(entry.getValue().asDouble())
+                                : entry.getValue().asText();
+                        cells.computeIfAbsent(rowKey, ignored -> new LinkedHashMap<>())
+                                .merge(colValue, 1L, Long::sum);
+                        try {
+                            double numeric = Double.parseDouble(colValue);
+                            rowSums.merge(rowKey, numeric, Double::sum);
+                            rowCounts.merge(rowKey, 1, Integer::sum);
+                        } catch (NumberFormatException ignored) {
+                            // non-numeric scale labels
+                        }
+                    });
+                } catch (Exception ignored) {
+                    // skip malformed
+                }
+            }
+            matrixCells = cells;
+            matrixRowAverages = new LinkedHashMap<>();
+            for (Map.Entry<String, Double> e : rowSums.entrySet()) {
+                int n = rowCounts.getOrDefault(e.getKey(), 0);
+                if (n > 0) {
+                    matrixRowAverages.put(e.getKey(), e.getValue() / n);
+                }
+            }
+            if (!matrixRowAverages.isEmpty()) {
+                avg = matrixRowAverages.values().stream().mapToDouble(Double::doubleValue).average().orElse(Double.NaN);
+                if (Double.isNaN(avg)) {
+                    avg = null;
+                }
+            }
         } else if (QuestionTypes.SINGLE_CHOICE.equals(meta.type())
                 || QuestionTypes.DROPDOWN.equals(meta.type())
                 || QuestionTypes.isBooleanLike(meta.type())
@@ -143,10 +208,35 @@ public class ReportingApplicationService {
             counts.entrySet().stream()
                     .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                     .forEach(e -> distribution.put(e.getKey(), e.getValue()));
+        } else if (QuestionTypes.DATE.equals(meta.type())) {
+            Map<String, Long> counts = new HashMap<>();
+            for (ResponseAnswerEntity a : answers) {
+                String key = a.getDateValue() == null ? "(empty)" : a.getDateValue().toString();
+                counts.merge(key, 1L, Long::sum);
+            }
+            counts.entrySet().stream()
+                    .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                    .forEach(e -> distribution.put(e.getKey(), e.getValue()));
         }
 
         return new QuestionResultsView(
-                questionId, meta.key(), meta.type(), count, false, null, distribution, avg);
+                questionId,
+                meta.key(),
+                meta.type(),
+                count,
+                false,
+                null,
+                distribution,
+                avg,
+                matrixCells,
+                matrixRowAverages);
+    }
+
+    private static String stripTrailingZero(double value) {
+        if (Math.rint(value) == value) {
+            return Long.toString((long) value);
+        }
+        return Double.toString(value);
     }
 
     public record RunSummaryView(
@@ -160,5 +250,7 @@ public class ReportingApplicationService {
             boolean masked,
             String maskReason,
             Map<String, Long> distribution,
-            Double average) {}
+            Double average,
+            Map<String, Map<String, Long>> matrixCells,
+            Map<String, Double> matrixRowAverages) {}
 }

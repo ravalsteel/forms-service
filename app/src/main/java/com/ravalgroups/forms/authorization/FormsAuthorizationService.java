@@ -82,9 +82,10 @@ public class FormsAuthorizationService {
         requireAnyPermission(user, FormsPermissionCode.VERSIONS_PUBLISH, FormsPermissionCode.RUNS_MANAGE);
     }
 
-    /** Convenience: reports.read. */
+    /** Convenience: reports.read, or publishers who manage runs. */
     public void requireAnalystOrAdmin(CurrentUser user) {
-        requirePermission(user, FormsPermissionCode.REPORTS_READ);
+        requireAnyPermission(
+                user, FormsPermissionCode.REPORTS_READ, FormsPermissionCode.RUNS_MANAGE);
     }
 
     /** Any role assignment (and thus any permission) grants access to read-safe company surfaces. */

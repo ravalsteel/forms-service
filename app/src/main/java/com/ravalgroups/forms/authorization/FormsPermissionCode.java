@@ -73,6 +73,8 @@ public final class FormsPermissionCode {
             RUNS_MANAGE,
             INVITATIONS_MANAGE,
             RESPONSES_READ,
+            REPORTS_READ,
+            EXPORTS_CREATE,
             FILES_UPLOAD,
             ROLES_READ);
 

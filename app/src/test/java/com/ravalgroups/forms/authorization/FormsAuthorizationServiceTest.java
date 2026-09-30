@@ -80,11 +80,24 @@ class FormsAuthorizationServiceTest {
         CurrentUser user = actor(userId, companyId);
         when(roles.userHasPermission(companyId, userId, FormsPermissionCode.REPORTS_READ))
                 .thenReturn(false);
+        when(roles.userHasPermission(companyId, userId, FormsPermissionCode.RUNS_MANAGE))
+                .thenReturn(false);
 
         assertThatThrownBy(() -> authz.requireAnalystOrAdmin(user))
                 .isInstanceOf(DomainException.class)
                 .extracting(ex -> ((DomainException) ex).code())
                 .isEqualTo("FORBIDDEN");
+    }
+
+    @Test
+    void requireAnalystOrAdminAllowsPublisherRunsManage() {
+        CurrentUser user = actor(userId, companyId);
+        when(roles.userHasPermission(companyId, userId, FormsPermissionCode.REPORTS_READ))
+                .thenReturn(false);
+        when(roles.userHasPermission(companyId, userId, FormsPermissionCode.RUNS_MANAGE))
+                .thenReturn(true);
+
+        authz.requireAnalystOrAdmin(user);
     }
 
     @Test
