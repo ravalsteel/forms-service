@@ -217,7 +217,72 @@ public class AnswerValidator {
                     input.objectId(),
                     now);
         }
+        if (QuestionTypes.isMatrix(type)) {
+            if (input.jsonValue() == null || input.jsonValue().isBlank()) {
+                throw new DomainException("INVALID_ANSWER", "jsonValue required for MATRIX " + meta.key());
+            }
+            validateMatrixAnswer(meta, input.jsonValue());
+            return ResponseAnswerEntity.create(
+                    UuidV7.create(),
+                    UUID.fromString(meta.id()),
+                    meta.key(),
+                    "JSON",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    input.jsonValue(),
+                    null,
+                    now);
+        }
         throw new DomainException("INVALID_ANSWER", "Unsupported question type " + type);
+    }
+
+    private void validateMatrixAnswer(QuestionMeta meta, String jsonValue) {
+        JsonNode configuration = meta.node().path("configuration");
+        JsonNode rows = configuration.path("rows");
+        JsonNode columns = configuration.path("columns");
+        Set<String> rowKeys = new HashSet<>();
+        Set<String> columnValues = new HashSet<>();
+        for (JsonNode row : rows) {
+            rowKeys.add(row.path("key").asText());
+        }
+        for (JsonNode column : columns) {
+            columnValues.add(column.path("value").asText());
+        }
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(jsonValue);
+        } catch (Exception ex) {
+            throw new DomainException("INVALID_ANSWER", "MATRIX jsonValue is not valid JSON for " + meta.key());
+        }
+        JsonNode cells = root.path("cells");
+        if (!cells.isObject()) {
+            throw new DomainException("INVALID_ANSWER", "MATRIX answer requires cells object for " + meta.key());
+        }
+        if (meta.required()) {
+            for (String rowKey : rowKeys) {
+                if (!cells.has(rowKey) || cells.get(rowKey).isNull()) {
+                    throw new DomainException(
+                            "INVALID_ANSWER", "MATRIX answer missing row " + rowKey + " for " + meta.key());
+                }
+            }
+        }
+        var fieldNames = cells.fieldNames();
+        while (fieldNames.hasNext()) {
+            String rowKey = fieldNames.next();
+            if (!rowKeys.contains(rowKey)) {
+                throw new DomainException(
+                        "INVALID_ANSWER", "MATRIX answer has unknown row " + rowKey + " for " + meta.key());
+            }
+            String value = cells.get(rowKey).asText();
+            if (!columnValues.contains(value)) {
+                throw new DomainException(
+                        "INVALID_ANSWER",
+                        "MATRIX answer has invalid column value for row " + rowKey + " in " + meta.key());
+            }
+        }
     }
 
     public record AnswerInput(

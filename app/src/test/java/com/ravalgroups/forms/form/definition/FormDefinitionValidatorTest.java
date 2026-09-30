@@ -83,4 +83,106 @@ class FormDefinitionValidatorTest {
                 }
                 """;
     }
+
+    @Test
+    void acceptsMatrixDefinitionAndMeta() {
+        assertDoesNotThrow(() -> validator.parseAndValidate("""
+                {
+                  "meta":{"issuingBodyTitle":"HR Department","introductionHtml":"<p>Hello</p>"},
+                  "pages":[{"id":"p1","title":"P","components":[{"id":"c1","type":"QUESTION","questionId":"q1"}]}],
+                  "questions":[{
+                    "id":"q1","key":"wage","type":"MATRIX","label":"Wage policies","required":true,
+                    "configuration":{
+                      "rows":[{"key":"salary","label":"I am satisfied with my current salary."}],
+                      "columns":[
+                        {"value":1,"label":"Very dissatisfied"},
+                        {"value":5,"label":"Very Satisfied"}
+                      ],
+                      "allowComment":true
+                    }
+                  }],
+                  "rules":[]
+                }
+                """));
+    }
+
+    @Test
+    void acceptsContentLocalesAndI18nOverlays() {
+        assertDoesNotThrow(() -> validator.parseAndValidate("""
+                {
+                  "meta":{
+                    "defaultLocale":"en",
+                    "contentLocales":["en","pt"],
+                    "issuingBodyTitle":"HR",
+                    "introductionHtml":"<p>Hi</p>",
+                    "i18n":{"pt":{"issuingBodyTitle":"RH","introductionHtml":"<p>Olá</p>"}}
+                  },
+                  "pages":[{"id":"p1","title":"P","components":[{"id":"c1","type":"QUESTION","questionId":"q1"}]}],
+                  "questions":[{
+                    "id":"q1","key":"wage","type":"MATRIX","label":"Wage",
+                    "i18n":{"pt":{"label":"Salário"}},
+                    "required":true,
+                    "configuration":{
+                      "rows":[{
+                        "key":"salary","label":"I am satisfied with my current salary.",
+                        "i18n":{"pt":{"label":"Estou satisfeito com o meu salário atual."}}
+                      }],
+                      "columns":[
+                        {"value":1,"label":"Very dissatisfied","i18n":{"pt":{"label":"Muito insatisfeito"}}},
+                        {"value":5,"label":"Very Satisfied","i18n":{"pt":{"label":"Muito satisfeito"}}}
+                      ],
+                      "allowComment":true,
+                      "commentLabel":"Comment",
+                      "commentLabelI18n":{"pt":"Comentário"}
+                    }
+                  }],
+                  "rules":[]
+                }
+                """));
+    }
+
+    @Test
+    void rejectsUnknownContentLocale() {
+        DomainException ex = assertThrows(DomainException.class, () -> validator.parseAndValidate("""
+                {
+                  "meta":{"defaultLocale":"en","contentLocales":["en","fr"]},
+                  "pages":[{"id":"p1","title":"P","components":[]}],
+                  "questions":[{"id":"q1","key":"a","type":"SHORT_TEXT","label":"A"}],
+                  "rules":[]
+                }
+                """));
+        assertEquals("INVALID_FORM_DEFINITION", ex.code());
+    }
+
+    @Test
+    void rejectsI18nLocaleOutsideContentLocales() {
+        // Overlays for known locales are allowed even if temporarily not in contentLocales.
+        assertDoesNotThrow(() -> validator.parseAndValidate("""
+                {
+                  "meta":{"defaultLocale":"en","contentLocales":["en"]},
+                  "pages":[{"id":"p1","title":"P","components":[]}],
+                  "questions":[{
+                    "id":"q1","key":"a","type":"SHORT_TEXT","label":"A",
+                    "i18n":{"pt":{"label":"A em português"}}
+                  }],
+                  "rules":[]
+                }
+                """));
+    }
+
+    @Test
+    void rejectsUnsupportedI18nLocaleCode() {
+        DomainException ex = assertThrows(DomainException.class, () -> validator.parseAndValidate("""
+                {
+                  "meta":{"defaultLocale":"en","contentLocales":["en"]},
+                  "pages":[{"id":"p1","title":"P","components":[]}],
+                  "questions":[{
+                    "id":"q1","key":"a","type":"SHORT_TEXT","label":"A",
+                    "i18n":{"fr":{"label":"A en français"}}
+                  }],
+                  "rules":[]
+                }
+                """));
+        assertEquals("INVALID_FORM_DEFINITION", ex.code());
+    }
 }

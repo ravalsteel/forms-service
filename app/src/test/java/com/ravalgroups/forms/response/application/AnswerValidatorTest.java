@@ -68,4 +68,34 @@ class AnswerValidatorTest {
                         Instant.now()));
         assertEquals("INVALID_QUESTION_REFERENCE", ex.code());
     }
+
+    @Test
+    void mapsMatrixAnswer() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        UUID matrixId = UuidV7.create();
+        String matrixDefinition = """
+                {
+                  "pages":[{"id":"p1","title":"P","components":[]}],
+                  "questions":[{
+                    "id":"%s","key":"wage","type":"MATRIX","label":"Wage","required":true,
+                    "configuration":{
+                      "rows":[{"key":"salary","label":"Salary"}],
+                      "columns":[{"value":1,"label":"Low"},{"value":5,"label":"High"}],
+                      "allowComment":true
+                    }
+                  }],
+                  "rules":[]
+                }
+                """.formatted(matrixId);
+        String json = mapper.writeValueAsString(
+                java.util.Map.of("cells", java.util.Map.of("salary", 5), "comment", "ok"));
+        var answers = validator.mapAnswers(
+                matrixDefinition,
+                List.of(new AnswerValidator.AnswerInput(
+                        matrixId, null, null, null, null, null, null, json, null)),
+                true,
+                Instant.now());
+        assertEquals(1, answers.size());
+        assertEquals("JSON", answers.getFirst().getValueType());
+    }
 }

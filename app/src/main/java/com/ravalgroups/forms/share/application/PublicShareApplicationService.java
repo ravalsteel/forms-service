@@ -5,6 +5,8 @@ import com.ravalgroups.forms.form.adapter.out.persistence.FormEntity;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormJpaRepository;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionEntity;
 import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionJpaRepository;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamCompanyProjectionEntity;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamCompanyProjectionJpaRepository;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseAnswerEntity;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseEntity;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseJpaRepository;
@@ -41,6 +43,7 @@ public class PublicShareApplicationService {
     private final DomainEventRecorder events;
     private final EntityManager entityManager;
     private final ShareLinkRateLimiter rateLimiter;
+    private final IamCompanyProjectionJpaRepository companies;
 
     public PublicShareApplicationService(
             ShareLinkJpaRepository shareLinks,
@@ -51,7 +54,8 @@ public class PublicShareApplicationService {
             AnswerValidator answerValidator,
             DomainEventRecorder events,
             EntityManager entityManager,
-            ShareLinkRateLimiter rateLimiter) {
+            ShareLinkRateLimiter rateLimiter,
+            IamCompanyProjectionJpaRepository companies) {
         this.shareLinks = shareLinks;
         this.runs = runs;
         this.forms = forms;
@@ -61,6 +65,7 @@ public class PublicShareApplicationService {
         this.events = events;
         this.entityManager = entityManager;
         this.rateLimiter = rateLimiter;
+        this.companies = companies;
     }
 
     @Transactional
@@ -75,6 +80,7 @@ public class PublicShareApplicationService {
         long submitted = responses.countByFormRunIdAndStatus(run.getId(), ResponseStatus.SUBMITTED);
         boolean accepting = run.getStatus() == com.ravalgroups.forms.run.domain.FormRunStatus.OPEN
                 && (link.getMaxResponses() == null || submitted < link.getMaxResponses());
+        IamCompanyProjectionEntity company = companies.findById(run.getCompanyId()).orElse(null);
         return new PublicShareView(
                 run.getName(),
                 form.getName(),
@@ -87,7 +93,10 @@ public class PublicShareApplicationService {
                 link.getExpiresAt(),
                 link.getMaxResponses(),
                 submitted,
-                accepting);
+                accepting,
+                company != null ? company.getCode() : null,
+                company != null ? company.getName() : null,
+                null);
     }
 
     @Transactional
@@ -325,5 +334,8 @@ public class PublicShareApplicationService {
             Instant shareExpiresAt,
             Integer maxResponses,
             long submittedCount,
-            boolean acceptingResponses) {}
+            boolean acceptingResponses,
+            String companyCode,
+            String companyName,
+            String logoUrl) {}
 }

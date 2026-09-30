@@ -59,6 +59,10 @@ logging:
     io.opentelemetry.sdk.trace.export: WARN
 
 management:
+  health:
+    # SMTP is optional here (log / messaging providers). Keep mail out of aggregate health.
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:

@@ -27,6 +27,8 @@ public final class QuestionTypes {
     public static final String YES_NO = "YES_NO";
     public static final String BOOLEAN = "BOOLEAN";
     public static final String FILE_UPLOAD = "FILE_UPLOAD";
+    /** Likert/grid: rows × shared column scale; answer stored as JSON. */
+    public static final String MATRIX = "MATRIX";
 
     public static final Set<String> ALL = Set.of(
             SHORT_TEXT,
@@ -49,7 +51,8 @@ public final class QuestionTypes {
             DATETIME,
             YES_NO,
             BOOLEAN,
-            FILE_UPLOAD);
+            FILE_UPLOAD,
+            MATRIX);
 
     private static final Map<String, String> ALIASES = Map.of(
             "MULTI_CHOICE", MULTIPLE_CHOICE,
@@ -84,5 +87,9 @@ public final class QuestionTypes {
 
     public static boolean isBooleanLike(String type) {
         return BOOLEAN.equals(type) || YES_NO.equals(type);
+    }
+
+    public static boolean isMatrix(String type) {
+        return MATRIX.equals(type);
     }
 }

@@ -1,6 +1,8 @@
 package com.ravalgroups.forms.security.api;
 
 import com.ravalgroups.forms.authorization.FormsAuthorizationService;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamCompanyProjectionEntity;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamCompanyProjectionJpaRepository;
 import com.ravalgroups.forms.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -18,9 +20,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class MeController {
 
     private final FormsAuthorizationService authz;
+    private final IamCompanyProjectionJpaRepository companies;
 
-    public MeController(FormsAuthorizationService authz) {
+    public MeController(FormsAuthorizationService authz, IamCompanyProjectionJpaRepository companies) {
         this.authz = authz;
+        this.companies = companies;
     }
 
     @GetMapping
@@ -29,6 +33,16 @@ public class MeController {
         CurrentUser user = CurrentUser.require();
         if (user.hasCompanyContext()) {
             authz.ensureSystemRoles(user.companyId());
+        }
+        String companyCode = null;
+        String companyName = null;
+        String logoUrl = null;
+        if (user.companyId() != null) {
+            IamCompanyProjectionEntity company = companies.findById(user.companyId()).orElse(null);
+            if (company != null) {
+                companyCode = company.getCode();
+                companyName = company.getName();
+            }
         }
         return new MeResponse(
                 user.userId(),
@@ -40,7 +54,10 @@ public class MeController {
                 user.clientId(),
                 authz.isBootstrapOpen(user.companyId()),
                 authz.assignedRoleCodes(user),
-                authz.assignedPermissions(user));
+                authz.assignedPermissions(user),
+                companyCode,
+                companyName,
+                logoUrl);
     }
 
     public record MeResponse(
@@ -53,5 +70,8 @@ public class MeController {
             String clientId,
             boolean bootstrapOpen,
             List<String> roles,
-            List<String> permissions) {}
+            List<String> permissions,
+            String companyCode,
+            String companyName,
+            String logoUrl) {}
 }
