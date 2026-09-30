@@ -1,8 +1,11 @@
 # AISCO HR Job Satisfaction Survey — Forms blueprint
 
-**Status:** Platform capabilities first (matrix, meta, branding, content i18n). **Do not create this form in production until reviewed.**  
+**Status:** Live form created in AISCO (published + OPEN anonymous run + public share).  
 **Source:** `HUMAN RESOURCES DEPARTMENT english Translated.docx`  
-**Company:** AISCO (`Angola Iron and Steel Corporation`)
+**Company:** AISCO (`Angola Iron and Steel Corporation`)  
+**Form ID:** `01a0f152-3026-7758-974e-59ddb98966cb`  
+**Run ID:** `01a0f152-6c70-7463-bbff-eb666e6009f9`  
+**Public fill URL:** https://forms.ravalgroups.com/s/5675a1cb215ea3812d8f2a10632144eca7d46e2c08c0bcac550c91a4d004404b
 
 ---
 
@@ -179,7 +182,7 @@ Not one DB row per Likert cell as separate questions. Display labels are localiz
 - [x] Designer: more types + matrix editor + WYSIWYG intro  
 - [x] Fill UI: matrix table + branded header (company code placeholder)  
 - [x] Form content i18n: `contentLocales` / `defaultLocale` / overlays; creator picks languages; respondent picker limited to those  
-- [ ] Create live AISCO form (only after this blueprint is approved)
+- [x] Create live AISCO form (published, OPEN anonymous run, public share)
 
 ---
 

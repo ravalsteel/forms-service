@@ -7,6 +7,7 @@ import com.ravalgroups.forms.form.application.FormApplicationService.FormView;
 import com.ravalgroups.forms.form.application.FormApplicationService.FormVersionView;
 import com.ravalgroups.forms.form.application.FormApplicationService.UpdateDraftCommand;
 import com.ravalgroups.forms.form.application.FormApplicationService.UpdateFormCommand;
+import com.ravalgroups.forms.form.application.FormApplicationService.WorkingCopyView;
 import com.ravalgroups.forms.security.CurrentUser;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -82,6 +83,14 @@ public class FormController {
                 CurrentUser.require(),
                 formId,
                 new CreateVersionCommand(body.fromVersionId(), body.definitionJson()));
+    }
+
+    /**
+     * Opens an editable draft for designers: reuse draft, reopen unused published, or copy to a new draft.
+     */
+    @PostMapping("/{formId}/working-copy")
+    public WorkingCopyView openWorkingCopy(@PathVariable UUID formId) {
+        return forms.openWorkingCopy(CurrentUser.require(), formId);
     }
 
     @GetMapping("/{formId}/versions/{versionId}")

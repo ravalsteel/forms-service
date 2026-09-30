@@ -18,6 +18,8 @@ public interface ResponseJpaRepository extends JpaRepository<ResponseEntity, UUI
 
     long countByFormRunId(UUID formRunId);
 
+    long countByFormVersionId(UUID formVersionId);
+
     List<ResponseEntity> findByFormRunIdAndStatus(UUID formRunId, ResponseStatus status);
 
     @Query("""

@@ -95,6 +95,21 @@ public class FormVersionEntity {
         this.updatedAt = now;
     }
 
+    /**
+     * Returns a published version to DRAFT when it has never been used for collection.
+     * Clears publish metadata so it behaves like a normal editable draft again.
+     */
+    public void reopenAsDraft(Instant now) {
+        if (this.status != FormVersionStatus.PUBLISHED) {
+            throw new DomainException(
+                    "FORM_VERSION_NOT_REOPENABLE", "Only PUBLISHED versions can be reopened as draft");
+        }
+        this.status = FormVersionStatus.DRAFT;
+        this.publishedBy = null;
+        this.publishedAt = null;
+        this.updatedAt = now;
+    }
+
     public void archive(Instant now) {
         if (this.status == FormVersionStatus.ARCHIVED) {
             return;

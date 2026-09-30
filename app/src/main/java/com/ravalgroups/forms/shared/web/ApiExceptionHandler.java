@@ -97,6 +97,7 @@ public class ApiExceptionHandler {
                     "FORM_VERSION_CONCURRENT_MODIFICATION",
                     "FORM_VERSION_MISMATCH",
                     "FORM_VERSION_NOT_EDITABLE",
+                    "FORM_VERSION_NOT_REOPENABLE",
                     "FORM_RUN_NOT_OPEN",
                     "RESPONSE_ALREADY_SUBMITTED",
                     "IDEMPOTENCY_KEY_REUSED",

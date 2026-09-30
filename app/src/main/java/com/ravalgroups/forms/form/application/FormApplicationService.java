@@ -9,6 +9,8 @@ import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionJpaReposito
 import com.ravalgroups.forms.form.definition.FormDefinitionValidator;
 import com.ravalgroups.forms.form.domain.FormStatus;
 import com.ravalgroups.forms.form.domain.FormVersionStatus;
+import com.ravalgroups.forms.response.adapter.out.persistence.ResponseJpaRepository;
+import com.ravalgroups.forms.run.adapter.out.persistence.FormRunJpaRepository;
 import com.ravalgroups.forms.security.CurrentUser;
 import com.ravalgroups.forms.shared.exception.DomainException;
 import com.ravalgroups.forms.shared.id.UuidV7;
@@ -16,6 +18,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +31,8 @@ public class FormApplicationService {
 
     private final FormJpaRepository forms;
     private final FormVersionJpaRepository versions;
+    private final FormRunJpaRepository runs;
+    private final ResponseJpaRepository responses;
     private final FormDefinitionValidator definitionValidator;
     private final FormsAuthorizationService authz;
     private final DomainEventRecorder events;
@@ -35,11 +40,15 @@ public class FormApplicationService {
     public FormApplicationService(
             FormJpaRepository forms,
             FormVersionJpaRepository versions,
+            FormRunJpaRepository runs,
+            ResponseJpaRepository responses,
             FormDefinitionValidator definitionValidator,
             FormsAuthorizationService authz,
             DomainEventRecorder events) {
         this.forms = forms;
         this.versions = versions;
+        this.runs = runs;
+        this.responses = responses;
         this.definitionValidator = definitionValidator;
         this.authz = authz;
         this.events = events;
@@ -164,6 +173,71 @@ public class FormApplicationService {
         FormVersionEntity draft = versions.save(FormVersionEntity.createDraft(
                 UuidV7.create(), formId, next, definition, actor.userId(), now));
         return toVersionView(draft);
+    }
+
+    /**
+     * Returns an editable draft for the form without asking the user to manage versions:
+     * existing draft, unused published version reopened as draft, or a new draft copied from
+     * the latest published version when answers/runs already exist.
+     */
+    @Transactional
+    public WorkingCopyView openWorkingCopy(CurrentUser actor, UUID formId) {
+        authz.requireDesignerOrAdmin(actor);
+        FormEntity form = requireForm(actor, formId);
+        if (form.getStatus() == FormStatus.ARCHIVED) {
+            throw new DomainException("INVALID_STATE", "Archived questionnaires cannot be edited");
+        }
+
+        Optional<FormVersionEntity> existingDraft = versions.findByFormIdAndStatus(formId, FormVersionStatus.DRAFT);
+        if (existingDraft.isPresent()) {
+            return new WorkingCopyView(toVersionView(existingDraft.get()), "EXISTING_DRAFT", null);
+        }
+
+        List<FormVersionEntity> published =
+                versions.findByFormIdOrderByVersionNumberDesc(formId).stream()
+                        .filter(v -> v.getStatus() == FormVersionStatus.PUBLISHED)
+                        .toList();
+        if (published.isEmpty()) {
+            Instant now = Instant.now();
+            int next = versions.findMaxVersionNumber(formId) + 1;
+            FormVersionEntity draft = versions.save(FormVersionEntity.createDraft(
+                    UuidV7.create(), formId, Math.max(next, 1), EMPTY_DEFINITION, actor.userId(), now));
+            return new WorkingCopyView(toVersionView(draft), "CREATED_EMPTY", null);
+        }
+
+        FormVersionEntity latestPublished = published.get(0);
+        if (isUnused(latestPublished.getId())) {
+            Instant now = Instant.now();
+            latestPublished.reopenAsDraft(now);
+            FormVersionEntity draft = versions.save(latestPublished);
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("formId", formId.toString());
+            payload.put("formVersionId", draft.getId().toString());
+            events.record(
+                    actor.companyId(),
+                    actor.userId(),
+                    "forms.version.reopened",
+                    "FormVersion",
+                    draft.getId(),
+                    "forms.version.reopened",
+                    payload);
+            return new WorkingCopyView(
+                    toVersionView(draft),
+                    "REOPENED_UNUSED",
+                    "No one has answered this yet, so you can keep editing it.");
+        }
+
+        FormVersionView draft = createVersion(
+                actor, formId, new CreateVersionCommand(latestPublished.getId(), null));
+        return new WorkingCopyView(
+                draft,
+                "CREATED_FROM_PUBLISHED",
+                "People already answered a previous version. Your edits go into an update; old answers stay safe.");
+    }
+
+    private boolean isUnused(UUID formVersionId) {
+        return runs.countByFormVersionId(formVersionId) == 0
+                && responses.countByFormVersionId(formVersionId) == 0;
     }
 
     @Transactional
@@ -318,4 +392,6 @@ public class FormApplicationService {
     public record CreateVersionCommand(UUID fromVersionId, String definitionJson) {}
 
     public record UpdateDraftCommand(String definitionJson, Long expectedRevision) {}
+
+    public record WorkingCopyView(FormVersionView version, String mode, String message) {}
 }
