@@ -155,6 +155,9 @@ public class ResponseApplicationService {
         if (answers != null && !answers.isEmpty()) {
             List<ResponseAnswerEntity> mapped =
                     answerValidator.mapAnswers(version.getDefinitionJson(), answers, true, now);
+            // Match autosave: delete existing rows before insert to satisfy uq_response_answer_question.
+            entity.clearAnswers();
+            entityManager.flush();
             entity.replaceAnswers(mapped);
         } else {
             // Re-validate existing answers without recreating rows (avoids unique constraint races).
