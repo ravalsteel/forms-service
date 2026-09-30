@@ -6,10 +6,10 @@ FORM TEMPLATE ──instantiate──▶ FORM ──▶ FORM VERSION (immutable 
                                               ▼
                                           FORM RUN
                                               │
-                        ┌─────────────────────┼─────────────────────┐
-                        ▼                     ▼                     ▼
-                   INVITATION           SHARE LINK              RESPONSE ──▶ RESPONSE ANSWER
-                 (auth invite)        (public multi-use)
+                        ┌─────────────────────┼─────────────────────┬──────────────────┐
+                        ▼                     ▼                     ▼                  ▼
+                   INVITATION           SHARE LINK              RESPONSE       AUDIENCE RULE
+                 (auth invite)        (public multi-use)                         (in-app fill)
 ```
 
 ## Lifecycles
@@ -28,5 +28,7 @@ FORM TEMPLATE ──instantiate──▶ FORM ──▶ FORM VERSION (immutable 
 - Submit payloads that disagree with the run version fail with `FORM_VERSION_MISMATCH`.
 - Anonymous runs store `respondent_id = null`.
 - Public share links bind to ANONYMOUS runs only; token is hashed at rest and may expire or cap submissions.
+- Identified/pseudonymous runs use **audience rules** (`ALL_COMPANY`, `DEPARTMENT`, `SUB_DEPARTMENT`, `USER`) for who can fill; `form_access` is design/admin only.
+- Opening an identified run requires at least one audience rule when `audience_required` is true.
 - Question identity is UUID + stable `key`, never array index.
 - Domain IDs use UUIDv7 (client-provided v7 accepted).

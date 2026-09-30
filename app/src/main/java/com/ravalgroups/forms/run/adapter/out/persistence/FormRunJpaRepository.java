@@ -12,6 +12,8 @@ public interface FormRunJpaRepository extends JpaRepository<FormRunEntity, UUID>
 
     List<FormRunEntity> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
 
+    List<FormRunEntity> findByCompanyIdAndStatusOrderByCreatedAtDesc(UUID companyId, FormRunStatus status);
+
     Optional<FormRunEntity> findByIdAndCompanyId(UUID id, UUID companyId);
 
     long countByFormVersionId(UUID formVersionId);

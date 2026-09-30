@@ -48,6 +48,9 @@ public class FormRunEntity {
     @Column(name = "min_aggregation_threshold", nullable = false)
     private int minAggregationThreshold;
 
+    @Column(name = "audience_required", nullable = false)
+    private boolean audienceRequired;
+
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
@@ -83,6 +86,7 @@ public class FormRunEntity {
         e.opensAt = opensAt;
         e.closesAt = closesAt;
         e.minAggregationThreshold = minAggregationThreshold;
+        e.audienceRequired = respondentMode != RespondentMode.ANONYMOUS;
         e.createdBy = createdBy;
         e.createdAt = now;
         e.updatedAt = now;
@@ -129,6 +133,7 @@ public class FormRunEntity {
     public Instant getOpensAt() { return opensAt; }
     public Instant getClosesAt() { return closesAt; }
     public int getMinAggregationThreshold() { return minAggregationThreshold; }
+    public boolean isAudienceRequired() { return audienceRequired; }
     public UUID getCreatedBy() { return createdBy; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

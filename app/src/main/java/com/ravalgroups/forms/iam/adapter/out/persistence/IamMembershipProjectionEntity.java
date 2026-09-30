@@ -36,6 +36,15 @@ public class IamMembershipProjectionEntity {
     @Column(name = "department_name", length = 255)
     private String departmentName;
 
+    @Column(name = "sub_department_id")
+    private UUID subDepartmentId;
+
+    @Column(name = "sub_department_code", length = 64)
+    private String subDepartmentCode;
+
+    @Column(name = "sub_department_name", length = 255)
+    private String subDepartmentName;
+
     @Column(name = "company_code", length = 64)
     private String companyCode;
 
@@ -85,6 +94,9 @@ public class IamMembershipProjectionEntity {
             UUID departmentId,
             String departmentCode,
             String departmentName,
+            UUID subDepartmentId,
+            String subDepartmentCode,
+            String subDepartmentName,
             String companyCode,
             String companyName,
             String username,
@@ -100,6 +112,9 @@ public class IamMembershipProjectionEntity {
         this.departmentId = departmentId;
         this.departmentCode = departmentCode;
         this.departmentName = departmentName;
+        this.subDepartmentId = subDepartmentId;
+        this.subDepartmentCode = subDepartmentCode;
+        this.subDepartmentName = subDepartmentName;
         this.companyCode = companyCode;
         this.companyName = companyName;
         this.username = username;
@@ -143,6 +158,18 @@ public class IamMembershipProjectionEntity {
         return departmentName;
     }
 
+    public UUID getSubDepartmentId() {
+        return subDepartmentId;
+    }
+
+    public String getSubDepartmentCode() {
+        return subDepartmentCode;
+    }
+
+    public String getSubDepartmentName() {
+        return subDepartmentName;
+    }
+
     public String getCompanyCode() {
         return companyCode;
     }
@@ -170,6 +197,13 @@ public class IamMembershipProjectionEntity {
     public void renameDepartment(String departmentCode, String departmentName, Instant now) {
         this.departmentCode = departmentCode;
         this.departmentName = departmentName;
+        this.syncedAt = now;
+        this.updatedAt = now;
+    }
+
+    public void renameSubDepartment(String subDepartmentCode, String subDepartmentName, Instant now) {
+        this.subDepartmentCode = subDepartmentCode;
+        this.subDepartmentName = subDepartmentName;
         this.syncedAt = now;
         this.updatedAt = now;
     }

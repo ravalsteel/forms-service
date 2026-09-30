@@ -100,6 +100,7 @@ public class IamHttpClient implements IamClientPort {
 
     private static IamMembershipView mapMembership(JsonNode body) {
         JsonNode department = body.get("department");
+        JsonNode subDepartment = body.get("subDepartment");
         return new IamMembershipView(
                 UUID.fromString(text(body, "id")),
                 UUID.fromString(text(body, "userId")),
@@ -111,6 +112,9 @@ public class IamHttpClient implements IamClientPort {
                 department == null || department.isNull() ? null : uuidOrNull(department, "id"),
                 department == null || department.isNull() ? null : text(department, "code"),
                 department == null || department.isNull() ? null : text(department, "name"),
+                subDepartment == null || subDepartment.isNull() ? null : uuidOrNull(subDepartment, "id"),
+                subDepartment == null || subDepartment.isNull() ? null : text(subDepartment, "code"),
+                subDepartment == null || subDepartment.isNull() ? null : text(subDepartment, "name"),
                 text(body, "username"),
                 text(body, "displayName"),
                 text(body, "email"));

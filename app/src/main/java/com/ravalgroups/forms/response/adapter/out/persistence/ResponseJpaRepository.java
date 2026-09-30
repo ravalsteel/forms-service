@@ -22,6 +22,11 @@ public interface ResponseJpaRepository extends JpaRepository<ResponseEntity, UUI
 
     List<ResponseEntity> findByFormRunIdAndStatus(UUID formRunId, ResponseStatus status);
 
+    Optional<ResponseEntity> findFirstByFormRunIdAndRespondentIdOrderByStartedAtDesc(
+            UUID formRunId, UUID respondentId);
+
+    List<ResponseEntity> findByFormRunIdInAndRespondentId(List<UUID> formRunIds, UUID respondentId);
+
     @Query("""
             select r from ResponseEntity r
             where r.status = com.ravalgroups.forms.response.domain.ResponseStatus.SUBMITTED

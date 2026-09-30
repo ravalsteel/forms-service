@@ -150,6 +150,12 @@ public class FormApplicationService {
         return toVersionView(requireVersion(formId, versionId));
     }
 
+    /** Used by respondent fill path after audience eligibility is verified. */
+    @Transactional(readOnly = true)
+    public FormVersionView getVersionWithoutAccessCheck(UUID formId, UUID versionId) {
+        return toVersionView(requireVersion(formId, versionId));
+    }
+
     @Transactional
     public FormVersionView createVersion(CurrentUser actor, UUID formId, CreateVersionCommand command) {
         authz.requireDesignerOrAdmin(actor);

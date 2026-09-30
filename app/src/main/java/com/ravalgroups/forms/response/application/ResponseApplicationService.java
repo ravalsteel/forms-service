@@ -12,6 +12,7 @@ import com.ravalgroups.forms.response.application.AnswerValidator.AnswerInput;
 import com.ravalgroups.forms.response.domain.ResponseStatus;
 import com.ravalgroups.forms.run.adapter.out.persistence.FormRunEntity;
 import com.ravalgroups.forms.run.application.FormRunApplicationService;
+import com.ravalgroups.forms.run.application.RunAudienceService;
 import com.ravalgroups.forms.run.domain.RespondentMode;
 import com.ravalgroups.forms.security.CurrentUser;
 import com.ravalgroups.forms.shared.exception.DomainException;
@@ -35,6 +36,7 @@ public class ResponseApplicationService {
     private final FormsAuthorizationService authz;
     private final DomainEventRecorder events;
     private final EntityManager entityManager;
+    private final RunAudienceService audience;
 
     public ResponseApplicationService(
             ResponseJpaRepository responses,
@@ -43,7 +45,8 @@ public class ResponseApplicationService {
             AnswerValidator answerValidator,
             FormsAuthorizationService authz,
             DomainEventRecorder events,
-            EntityManager entityManager) {
+            EntityManager entityManager,
+            RunAudienceService audience) {
         this.responses = responses;
         this.runs = runs;
         this.versions = versions;
@@ -51,6 +54,7 @@ public class ResponseApplicationService {
         this.authz = authz;
         this.events = events;
         this.entityManager = entityManager;
+        this.audience = audience;
     }
 
     @Transactional
@@ -59,6 +63,7 @@ public class ResponseApplicationService {
         authz.requireAssigned(actor);
         FormRunEntity run = runs.requireRun(actor, runId);
         run.requireOpen();
+        audience.requireEligible(actor, run);
 
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             var existing = responses.findByFormRunIdAndIdempotencyKey(runId, idempotencyKey.trim());
@@ -115,6 +120,8 @@ public class ResponseApplicationService {
         ResponseEntity entity = requireResponse(actor, responseId);
         authorizeWrite(actor, entity);
         entity.requireInProgress();
+        FormRunEntity run = runs.requireRun(actor, entity.getFormRunId());
+        audience.requireEligible(actor, run);
         FormVersionEntity version = versions
                 .findById(entity.getFormVersionId())
                 .orElseThrow(() -> new DomainException("FORM_VERSION_NOT_FOUND", "Form version not found"));
@@ -138,6 +145,7 @@ public class ResponseApplicationService {
         }
         FormRunEntity run = runs.requireRun(actor, entity.getFormRunId());
         run.requireOpen();
+        audience.requireEligible(actor, run);
 
         if (expectedFormVersionId != null && !expectedFormVersionId.equals(run.getFormVersionId())) {
             throw new DomainException(

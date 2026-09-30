@@ -7,6 +7,8 @@ import com.ravalgroups.forms.iam.adapter.out.persistence.IamCompanyProjectionJpa
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamDepartmentProjectionEntity;
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamDepartmentProjectionJpaRepository;
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionEntity;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamSubDepartmentProjectionEntity;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamSubDepartmentProjectionJpaRepository;
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionJpaRepository;
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamUserProjectionEntity;
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamUserProjectionJpaRepository;
@@ -27,18 +29,21 @@ public class ApplyIamDomainEvent {
     private final IamMembershipProjectionJpaRepository memberships;
     private final IamCompanyProjectionJpaRepository companies;
     private final IamDepartmentProjectionJpaRepository departments;
+    private final IamSubDepartmentProjectionJpaRepository subDepartments;
 
     public ApplyIamDomainEvent(
             ObjectMapper objectMapper,
             IamUserProjectionJpaRepository users,
             IamMembershipProjectionJpaRepository memberships,
             IamCompanyProjectionJpaRepository companies,
-            IamDepartmentProjectionJpaRepository departments) {
+            IamDepartmentProjectionJpaRepository departments,
+            IamSubDepartmentProjectionJpaRepository subDepartments) {
         this.objectMapper = objectMapper;
         this.users = users;
         this.memberships = memberships;
         this.companies = companies;
         this.departments = departments;
+        this.subDepartments = subDepartments;
     }
 
     @Transactional
@@ -69,6 +74,10 @@ public class ApplyIamDomainEvent {
         }
         if (routingKey.startsWith("iam.department.")) {
             upsertDepartment(payload, now);
+            return;
+        }
+        if (routingKey.startsWith("iam.sub_department.")) {
+            upsertSubDepartment(payload, now);
             return;
         }
         if (routingKey.startsWith("iam.application_access.")) {
@@ -120,6 +129,16 @@ public class ApplyIamDomainEvent {
             departmentName = text(department, "name");
         }
 
+        JsonNode subDepartment = payload.get("subDepartment");
+        UUID subDepartmentId = null;
+        String subDepartmentCode = null;
+        String subDepartmentName = null;
+        if (subDepartment != null && !subDepartment.isNull()) {
+            subDepartmentId = uuidOrNull(subDepartment, "id");
+            subDepartmentCode = text(subDepartment, "code");
+            subDepartmentName = text(subDepartment, "name");
+        }
+
         IamMembershipProjectionEntity membership = memberships
                 .findById(id)
                 .orElseGet(() -> IamMembershipProjectionEntity.createNew(id, now));
@@ -131,6 +150,9 @@ public class ApplyIamDomainEvent {
                 departmentId,
                 departmentCode,
                 departmentName,
+                subDepartmentId,
+                subDepartmentCode,
+                subDepartmentName,
                 companyCode,
                 companyName,
                 text(payload, "username"),
@@ -209,6 +231,29 @@ public class ApplyIamDomainEvent {
 
         for (IamMembershipProjectionEntity membership : memberships.findByDepartmentId(id)) {
             membership.renameDepartment(code, name, now);
+            memberships.save(membership);
+        }
+    }
+
+    private void upsertSubDepartment(JsonNode payload, Instant now) {
+        UUID id = uuid(payload, "id");
+        String code = text(payload, "code");
+        String name = text(payload, "name");
+        String status = text(payload, "status");
+        IamSubDepartmentProjectionEntity subDepartment =
+                subDepartments.findById(id).orElseGet(() -> IamSubDepartmentProjectionEntity.createNew(id, now));
+        subDepartment.apply(
+                uuid(payload, "companyId"),
+                uuid(payload, "departmentId"),
+                code,
+                name == null ? "" : name,
+                status,
+                null,
+                now);
+        subDepartments.save(subDepartment);
+
+        for (IamMembershipProjectionEntity membership : memberships.findBySubDepartmentId(id)) {
+            membership.renameSubDepartment(code, name, now);
             memberships.save(membership);
         }
     }

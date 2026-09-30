@@ -1,13 +1,17 @@
 package com.ravalgroups.forms.iam.application;
 
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamDepartmentProjectionJpaRepository;
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionEntity;
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionJpaRepository;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamSubDepartmentProjectionEntity;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamSubDepartmentProjectionJpaRepository;
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamUserProjectionEntity;
 import com.ravalgroups.forms.iam.adapter.out.persistence.IamUserProjectionJpaRepository;
 import com.ravalgroups.forms.shared.exception.DomainException;
 import com.ravalgroups.forms.shared.pagination.PageQuery;
 import com.ravalgroups.forms.shared.pagination.PageResult;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -20,10 +24,18 @@ public class QueryIamProjection {
 
     private final IamUserProjectionJpaRepository users;
     private final IamMembershipProjectionJpaRepository memberships;
+    private final IamDepartmentProjectionJpaRepository departments;
+    private final IamSubDepartmentProjectionJpaRepository subDepartments;
 
-    public QueryIamProjection(IamUserProjectionJpaRepository users, IamMembershipProjectionJpaRepository memberships) {
+    public QueryIamProjection(
+            IamUserProjectionJpaRepository users,
+            IamMembershipProjectionJpaRepository memberships,
+            IamDepartmentProjectionJpaRepository departments,
+            IamSubDepartmentProjectionJpaRepository subDepartments) {
         this.users = users;
         this.memberships = memberships;
+        this.departments = departments;
+        this.subDepartments = subDepartments;
     }
 
     @Transactional(readOnly = true)
@@ -45,7 +57,8 @@ public class QueryIamProjection {
     @Transactional(readOnly = true)
     public PageResult<EmployeeProjectionView> listCompanyEmployees(
             UUID companyId, String q, Integer page, Integer size, String sort) {
-        Pageable pageable = PageQuery.toPageable(page, size, sort, Set.of("employeeId", "displayName", "syncedAt"), "displayName");
+        Pageable pageable =
+                PageQuery.toPageable(page, size, sort, Set.of("employeeId", "displayName", "syncedAt"), "displayName");
         Page<IamMembershipProjectionEntity> result;
         if (q == null || q.isBlank()) {
             result = memberships.findByCompanyId(companyId, pageable);
@@ -53,6 +66,30 @@ public class QueryIamProjection {
             result = memberships.searchByCompany(companyId, q.trim(), pageable);
         }
         return PageResult.from(result.map(this::toView));
+    }
+
+    @Transactional(readOnly = true)
+    public List<DepartmentProjectionView> listDepartments(UUID companyId) {
+        return departments.findByCompanyIdOrderByNameAsc(companyId).stream()
+                .map(d -> new DepartmentProjectionView(
+                        d.getDepartmentId(), d.getCompanyId(), d.getCode(), d.getName(), d.getStatus()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SubDepartmentProjectionView> listSubDepartments(UUID companyId, UUID departmentId) {
+        List<IamSubDepartmentProjectionEntity> rows = departmentId == null
+                ? subDepartments.findByCompanyIdOrderByNameAsc(companyId)
+                : subDepartments.findByCompanyIdAndDepartmentIdOrderByNameAsc(companyId, departmentId);
+        return rows.stream()
+                .map(s -> new SubDepartmentProjectionView(
+                        s.getSubDepartmentId(),
+                        s.getCompanyId(),
+                        s.getDepartmentId(),
+                        s.getCode(),
+                        s.getName(),
+                        s.getStatus()))
+                .toList();
     }
 
     private EmployeeProjectionView toView(IamMembershipProjectionEntity membership) {
@@ -72,6 +109,9 @@ public class QueryIamProjection {
                 membership.getDepartmentId(),
                 membership.getDepartmentCode(),
                 membership.getDepartmentName(),
+                membership.getSubDepartmentId(),
+                membership.getSubDepartmentCode(),
+                membership.getSubDepartmentName(),
                 membership.getCompanyCode(),
                 membership.getCompanyName(),
                 membership.getStatus(),
@@ -92,9 +132,17 @@ public class QueryIamProjection {
             UUID departmentId,
             String departmentCode,
             String departmentName,
+            UUID subDepartmentId,
+            String subDepartmentCode,
+            String subDepartmentName,
             String companyCode,
             String companyName,
             String membershipStatus,
             String userStatus,
             Instant syncedAt) {}
+
+    public record DepartmentProjectionView(UUID id, UUID companyId, String code, String name, String status) {}
+
+    public record SubDepartmentProjectionView(
+            UUID id, UUID companyId, UUID departmentId, String code, String name, String status) {}
 }

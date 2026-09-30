@@ -36,6 +36,9 @@ public interface IamClientPort {
             UUID departmentId,
             String departmentCode,
             String departmentName,
+            UUID subDepartmentId,
+            String subDepartmentCode,
+            String subDepartmentName,
             String username,
             String displayName,
             String email) {}

@@ -1,8 +1,13 @@
 package com.ravalgroups.forms.run.adapter.in.web;
 
+import com.ravalgroups.forms.form.application.FormApplicationService.FormVersionView;
 import com.ravalgroups.forms.run.application.FormRunApplicationService;
 import com.ravalgroups.forms.run.application.FormRunApplicationService.CreateRunCommand;
 import com.ravalgroups.forms.run.application.FormRunApplicationService.RunView;
+import com.ravalgroups.forms.run.application.RunAudienceService;
+import com.ravalgroups.forms.run.application.RunAudienceService.AudienceRuleInput;
+import com.ravalgroups.forms.run.application.RunAudienceService.AudienceView;
+import com.ravalgroups.forms.run.domain.AudienceRuleType;
 import com.ravalgroups.forms.run.domain.FormRunStatus;
 import com.ravalgroups.forms.run.domain.RespondentMode;
 import com.ravalgroups.forms.security.CurrentUser;
@@ -15,8 +20,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,9 +31,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class FormRunController {
 
     private final FormRunApplicationService runs;
+    private final RunAudienceService audience;
 
-    public FormRunController(FormRunApplicationService runs) {
+    public FormRunController(FormRunApplicationService runs, RunAudienceService audience) {
         this.runs = runs;
+        this.audience = audience;
     }
 
     @GetMapping("/api/v1/forms/{formId}/runs")
@@ -63,6 +70,28 @@ public class FormRunController {
         return runs.get(CurrentUser.require(), runId);
     }
 
+    @GetMapping("/api/v1/runs/{runId}/respond")
+    public RunView getForRespond(@PathVariable UUID runId) {
+        return runs.getForRespond(CurrentUser.require(), runId);
+    }
+
+    @GetMapping("/api/v1/runs/{runId}/respond/version")
+    public FormVersionView getVersionForRespond(@PathVariable UUID runId) {
+        return runs.getVersionForRespond(CurrentUser.require(), runId);
+    }
+
+    @PutMapping("/api/v1/runs/{runId}/audience")
+    public AudienceView putAudience(@PathVariable UUID runId, @RequestBody ReplaceAudienceRequest request) {
+        List<AudienceRuleInput> rules = request == null || request.rules() == null
+                ? List.of()
+                : request.rules().stream()
+                        .map(r -> new AudienceRuleInput(
+                                AudienceRuleType.valueOf(r.type().trim().toUpperCase()),
+                                r.targetId()))
+                        .toList();
+        return audience.replaceAudience(CurrentUser.require(), runId, rules);
+    }
+
     @PostMapping("/api/v1/runs/{runId}/open")
     public RunView open(@PathVariable UUID runId) {
         return runs.open(CurrentUser.require(), runId);
@@ -86,4 +115,8 @@ public class FormRunController {
             Instant opensAt,
             Instant closesAt,
             Integer minAggregationThreshold) {}
+
+    public record ReplaceAudienceRequest(List<AudienceRuleRequest> rules) {}
+
+    public record AudienceRuleRequest(String type, UUID targetId) {}
 }

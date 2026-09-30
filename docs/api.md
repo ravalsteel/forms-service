@@ -20,15 +20,30 @@ Draft PATCH requires `expectedRevision`.
 ## Runs
 
 - `POST/GET /forms/{formId}/runs`
-- `GET /runs/{runId}`
+- `GET /runs/{runId}` — designer/admin (requires form `VIEW`)
+- `GET /runs/{runId}/respond` — respondent path (audience eligibility; no form ACL)
+- `GET /runs/{runId}/respond/version` — published definition for fill (audience eligibility)
+- `PUT /runs/{runId}/audience` — replace audience rules `{ rules: [{ type, targetId? }] }`
+  - `type`: `ALL_COMPANY` | `DEPARTMENT` | `SUB_DEPARTMENT` | `USER`
+  - Identified/pseudonymous collections require at least one rule before `open`
+  - Anonymous (public) collections ignore audience; use share links
 - `POST /runs/{runId}/open|close|cancel`
+- `GET /me/collections` — open collections the current user is eligible to fill
+
+`form_access` controls who can design/manage a questionnaire. It does **not** control who can fill a collection; use run audience for that.
 
 ## Responses
 
-- `POST /runs/{runId}/responses` (+ optional `Idempotency-Key`, client `responseId`)
+- `POST /runs/{runId}/responses` (+ optional `Idempotency-Key`, client `responseId`) — enforces run audience for identified/pseudonymous
 - `GET/PATCH /responses/{responseId}`
 - `POST /responses/{responseId}/submit` (body may include `formVersionId`)
 - `POST /responses/{responseId}/anonymize`
+
+## IAM projections (read-only)
+
+- `GET /employees`, `GET /employees/{iamUserId}`, `GET /employees/by-employee-id/{employeeId}`
+- `GET /departments`
+- `GET /sub-departments?departmentId=`
 
 ## Reporting / exports / files / invitations / share links
 

@@ -8,6 +8,7 @@ import com.ravalgroups.forms.form.application.FormApplicationService;
 import com.ravalgroups.forms.form.domain.FormAccessLevel;
 import com.ravalgroups.forms.run.adapter.out.persistence.FormRunEntity;
 import com.ravalgroups.forms.run.adapter.out.persistence.FormRunJpaRepository;
+import com.ravalgroups.forms.run.application.RunAudienceService.AudienceView;
 import com.ravalgroups.forms.run.domain.FormRunStatus;
 import com.ravalgroups.forms.run.domain.RespondentMode;
 import com.ravalgroups.forms.security.CurrentUser;
@@ -31,6 +32,7 @@ public class FormRunApplicationService {
     private final FormsAuthorizationService authz;
     private final DomainEventRecorder events;
     private final FormsReportingProperties reportingProperties;
+    private final RunAudienceService audience;
 
     public FormRunApplicationService(
             FormRunJpaRepository runs,
@@ -38,13 +40,15 @@ public class FormRunApplicationService {
             FormAccessService formAccess,
             FormsAuthorizationService authz,
             DomainEventRecorder events,
-            FormsReportingProperties reportingProperties) {
+            FormsReportingProperties reportingProperties,
+            RunAudienceService audience) {
         this.runs = runs;
         this.forms = forms;
         this.formAccess = formAccess;
         this.authz = authz;
         this.events = events;
         this.reportingProperties = reportingProperties;
+        this.audience = audience;
     }
 
     @Transactional(readOnly = true)
@@ -64,6 +68,24 @@ public class FormRunApplicationService {
         return toView(run);
     }
 
+    /** Respondent path: audience eligibility instead of form_access VIEW. */
+    @Transactional(readOnly = true)
+    public RunView getForRespond(CurrentUser actor, UUID runId) {
+        authz.requireAssigned(actor);
+        FormRunEntity run = requireRun(actor, runId);
+        audience.requireEligible(actor, run);
+        return toView(run);
+    }
+
+    /** Respondent path: published version for fill without form_access. */
+    @Transactional(readOnly = true)
+    public FormApplicationService.FormVersionView getVersionForRespond(CurrentUser actor, UUID runId) {
+        authz.requireAssigned(actor);
+        FormRunEntity run = requireRun(actor, runId);
+        audience.requireEligible(actor, run);
+        return forms.getVersionWithoutAccessCheck(run.getFormId(), run.getFormVersionId());
+    }
+
     @Transactional
     public RunView create(CurrentUser actor, UUID formId, CreateRunCommand command) {
         authz.requirePublisherOrAdmin(actor);
@@ -79,6 +101,10 @@ public class FormRunApplicationService {
                 ? RespondentMode.IDENTIFIED
                 : command.respondentMode();
         FormRunStatus status = command.status() == null ? FormRunStatus.SCHEDULED : command.status();
+        // Identified collections need audience before open — do not create already-OPEN.
+        if (mode != RespondentMode.ANONYMOUS && status == FormRunStatus.OPEN) {
+            status = FormRunStatus.SCHEDULED;
+        }
         int threshold = command.minAggregationThreshold() == null
                 ? reportingProperties.defaultMinAggregationThreshold()
                 : command.minAggregationThreshold();
@@ -113,6 +139,7 @@ public class FormRunApplicationService {
         authz.requirePublisherOrAdmin(actor);
         FormRunEntity run = requireRun(actor, runId);
         formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.MANAGE);
+        audience.requireConfiguredForOpen(run);
         run.open(Instant.now());
         runs.save(run);
         events.record(
@@ -184,6 +211,8 @@ public class FormRunApplicationService {
                 e.getOpensAt(),
                 e.getClosesAt(),
                 e.getMinAggregationThreshold(),
+                e.isAudienceRequired(),
+                audience.audienceView(e),
                 e.getCreatedBy(),
                 e.getCreatedAt(),
                 e.getUpdatedAt());
@@ -200,6 +229,8 @@ public class FormRunApplicationService {
             Instant opensAt,
             Instant closesAt,
             int minAggregationThreshold,
+            boolean audienceRequired,
+            AudienceView audience,
             UUID createdBy,
             Instant createdAt,
             Instant updatedAt) {}

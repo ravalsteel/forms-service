@@ -15,11 +15,16 @@ import com.ravalgroups.forms.form.application.FormApplicationService.CreateFormC
 import com.ravalgroups.forms.form.application.FormApplicationService.CreateVersionCommand;
 import com.ravalgroups.forms.form.application.FormApplicationService.FormVersionView;
 import com.ravalgroups.forms.form.application.FormApplicationService.UpdateDraftCommand;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionEntity;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionJpaRepository;
 import com.ravalgroups.forms.response.application.AnswerValidator.AnswerInput;
 import com.ravalgroups.forms.response.application.ResponseApplicationService;
 import com.ravalgroups.forms.response.application.ResponseApplicationService.ResponseView;
 import com.ravalgroups.forms.run.application.FormRunApplicationService;
 import com.ravalgroups.forms.run.application.FormRunApplicationService.CreateRunCommand;
+import com.ravalgroups.forms.run.application.RunAudienceService;
+import com.ravalgroups.forms.run.application.RunAudienceService.AudienceRuleInput;
+import com.ravalgroups.forms.run.domain.AudienceRuleType;
 import com.ravalgroups.forms.run.domain.FormRunStatus;
 import com.ravalgroups.forms.run.domain.RespondentMode;
 import com.ravalgroups.forms.security.CurrentUser;
@@ -76,6 +81,12 @@ class FormLifecycleIntegrationTest {
     @Autowired
     FormsUserRoleJpaRepository userRoles;
 
+    @Autowired
+    RunAudienceService audience;
+
+    @Autowired
+    IamMembershipProjectionJpaRepository memberships;
+
     private CurrentUser actor;
 
     @BeforeEach
@@ -85,8 +96,30 @@ class FormLifecycleIntegrationTest {
         actor = new CurrentUser(userId, companyId, "EMP-1", "forms", "sid", 0L, "web");
         authz.ensureSystemRoles(companyId);
         var admin = roles.findByCompanyIdAndCode(companyId, FormsRoleCode.ADMIN).orElseThrow();
+        Instant now = Instant.now();
         userRoles.save(FormsUserRoleEntity.create(
-                UuidV7.create(), companyId, userId, admin.getId(), Instant.now()));
+                UuidV7.create(), companyId, userId, admin.getId(), now));
+        IamMembershipProjectionEntity membership = IamMembershipProjectionEntity.createNew(UuidV7.create(), now);
+        membership.apply(
+                userId,
+                companyId,
+                "EMP-1",
+                "ACTIVE",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "C",
+                "Company",
+                "emp1",
+                "Emp One",
+                null,
+                null,
+                1L,
+                now);
+        memberships.save(membership);
     }
 
     @Test
@@ -122,7 +155,9 @@ class FormLifecycleIntegrationTest {
                 actor,
                 form.id(),
                 new CreateRunCommand(
-                        published.id(), "Q1 run", RespondentMode.IDENTIFIED, FormRunStatus.OPEN, null, null, 5));
+                        published.id(), "Q1 run", RespondentMode.IDENTIFIED, FormRunStatus.SCHEDULED, null, null, 5));
+        audience.replaceAudience(
+                actor, run.id(), List.of(new AudienceRuleInput(AudienceRuleType.ALL_COMPANY, null)));
         runs.open(actor, run.id());
 
         UUID clientResponseId = UuidV7.create();

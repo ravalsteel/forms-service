@@ -34,5 +34,7 @@ public interface IamMembershipProjectionJpaRepository extends JpaRepository<IamM
 
     List<IamMembershipProjectionEntity> findByDepartmentId(UUID departmentId);
 
+    List<IamMembershipProjectionEntity> findBySubDepartmentId(UUID subDepartmentId);
+
     long countByCompanyId(UUID companyId);
 }
