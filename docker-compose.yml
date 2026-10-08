@@ -108,6 +108,7 @@ services:
       - "127.0.0.1:${SERVER_PORT:-8094}:8094"
       - "${DOCKER_GATEWAY:-172.17.0.1}:${SERVER_PORT:-8094}:8094"
       - "127.0.0.1:${MANAGEMENT_SERVER_PORT:-8095}:8095"
+      - "${DOCKER_GATEWAY:-172.17.0.1}:${MANAGEMENT_SERVER_PORT:-8095}:8095"
     stop_grace_period: 30s
     restart: unless-stopped
     healthcheck:
