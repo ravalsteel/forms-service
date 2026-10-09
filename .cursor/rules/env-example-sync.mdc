@@ -1,0 +1,25 @@
+---
+description: Keep .env.example in sync whenever .env keys are added or renamed
+alwaysApply: true
+---
+
+# Env example sync
+
+Whenever you add, rename, or remove a key in `.env` or `.env.local` in any Raval service/portal:
+
+1. Update the sibling `.env.example` in the **same change**.
+2. Use placeholders only — never copy real secrets, passwords, tokens, or connection strings with credentials.
+3. Secrets (`*_PASSWORD`, `*_SECRET`, `*_TOKEN`, `*_KEY`, bridge secrets): leave empty (`KEY=`).
+4. Non-secrets: use safe docs values (`127.0.0.1`, `http://127.0.0.1:PORT`, `example.invalid`, `true`/`false`, numeric ports).
+5. Prefer placing new keys next to related existing keys (not only an appended dump block).
+6. If you introduce a new required env var in code/compose docs, add it to `.env.example` even before a local `.env` exists.
+
+```bash
+# ❌ BAD — secret leaked into example
+CONSOLE_BRIDGE_SECRET=a1b2c3realvalue
+
+# ✅ GOOD
+CONSOLE_BRIDGE_SECRET=
+```
+
+Do not finish an env-related task while `.env` / `.env.local` keys are missing from `.env.example`.
