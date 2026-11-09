@@ -9,8 +9,12 @@ import com.ravalgroups.forms.export.domain.ExportJobStatus;
 import com.ravalgroups.forms.file.adapter.out.persistence.StoredFileEntity;
 import com.ravalgroups.forms.file.adapter.out.persistence.StoredFileJpaRepository;
 import com.ravalgroups.forms.file.application.port.FileStoragePort;
+import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionEntity;
+import com.ravalgroups.forms.form.adapter.out.persistence.FormVersionJpaRepository;
 import com.ravalgroups.forms.form.application.FormAccessService;
 import com.ravalgroups.forms.form.domain.FormAccessLevel;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionEntity;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionJpaRepository;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseAnswerEntity;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseEntity;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseJpaRepository;
@@ -28,10 +32,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -50,6 +57,8 @@ public class ExportApplicationService {
 
     private final ExportJobJpaRepository exports;
     private final FormRunApplicationService runs;
+    private final FormVersionJpaRepository versions;
+    private final IamMembershipProjectionJpaRepository memberships;
     private final ResponseJpaRepository responses;
     private final FileStoragePort storage;
     private final StoredFileJpaRepository files;
@@ -61,6 +70,8 @@ public class ExportApplicationService {
     public ExportApplicationService(
             ExportJobJpaRepository exports,
             FormRunApplicationService runs,
+            FormVersionJpaRepository versions,
+            IamMembershipProjectionJpaRepository memberships,
             ResponseJpaRepository responses,
             FileStoragePort storage,
             StoredFileJpaRepository files,
@@ -70,6 +81,8 @@ public class ExportApplicationService {
             ObjectMapper objectMapper) {
         this.exports = exports;
         this.runs = runs;
+        this.versions = versions;
+        this.memberships = memberships;
         this.responses = responses;
         this.storage = storage;
         this.files = files;
@@ -160,43 +173,38 @@ public class ExportApplicationService {
     }
 
     private void completeCsv(ExportJobEntity job) throws IOException {
-        byte[] bytes = buildCsv(loadSubmitted(job.getFormRunId())).getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = ReadableResponseExport.toCsv(readableGrid(job)).getBytes(StandardCharsets.UTF_8);
         storeCompleted(job, bytes, "text/csv", "export-" + job.getId() + ".csv");
     }
 
     private void completeJson(ExportJobEntity job) throws IOException {
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (ResponseEntity response : loadSubmitted(job.getFormRunId())) {
-            for (ResponseAnswerEntity answer : response.getAnswers()) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("responseId", response.getId().toString());
-                row.put("questionKey", answer.getQuestionKey());
-                row.put("valueType", answer.getValueType());
-                row.put("value", renderValue(answer));
-                rows.add(row);
+        ReadableResponseExport.Grid grid = readableGrid(job);
+        List<Map<String, String>> rows = new ArrayList<>();
+        for (List<String> values : grid.rows()) {
+            Map<String, String> row = new LinkedHashMap<>();
+            for (int i = 0; i < grid.headers().size(); i++) {
+                row.put(grid.headers().get(i), i < values.size() ? values.get(i) : "");
             }
+            rows.add(row);
         }
         byte[] bytes = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(rows);
         storeCompleted(job, bytes, "application/json", "export-" + job.getId() + ".json");
     }
 
     private void completeXlsx(ExportJobEntity job) throws IOException {
+        ReadableResponseExport.Grid grid = readableGrid(job);
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(100);
                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Sheet sheet = workbook.createSheet("responses");
+            Sheet sheet = workbook.createSheet("Responses");
             Row header = sheet.createRow(0);
-            header.createCell(0).setCellValue("response_id");
-            header.createCell(1).setCellValue("question_key");
-            header.createCell(2).setCellValue("value_type");
-            header.createCell(3).setCellValue("value");
+            for (int i = 0; i < grid.headers().size(); i++) {
+                header.createCell(i).setCellValue(grid.headers().get(i));
+            }
             int rowIdx = 1;
-            for (ResponseEntity response : loadSubmitted(job.getFormRunId())) {
-                for (ResponseAnswerEntity answer : response.getAnswers()) {
-                    Row row = sheet.createRow(rowIdx++);
-                    row.createCell(0).setCellValue(response.getId().toString());
-                    row.createCell(1).setCellValue(answer.getQuestionKey());
-                    row.createCell(2).setCellValue(answer.getValueType());
-                    row.createCell(3).setCellValue(renderValue(answer));
+            for (List<String> values : grid.rows()) {
+                Row row = sheet.createRow(rowIdx++);
+                for (int i = 0; i < values.size(); i++) {
+                    row.createCell(i).setCellValue(values.get(i));
                 }
             }
             workbook.write(out);
@@ -209,25 +217,50 @@ public class ExportApplicationService {
         }
     }
 
-    private List<ResponseEntity> loadSubmitted(UUID formRunId) {
-        return responses.findByFormRunIdAndStatus(formRunId, ResponseStatus.SUBMITTED);
+    private ReadableResponseExport.Grid readableGrid(ExportJobEntity job) {
+        List<ResponseEntity> submitted = new ArrayList<>(loadSubmitted(job.getFormRunId()));
+        Set<String> seenKeys = new LinkedHashSet<>();
+        List<ReadableResponseExport.QuestionColumn> questions = new ArrayList<>();
+        submitted.stream()
+                .map(ResponseEntity::getFormVersionId)
+                .distinct()
+                .map(versions::findById)
+                .flatMap(java.util.Optional::stream)
+                .sorted(Comparator.comparingInt(FormVersionEntity::getVersionNumber))
+                .forEach(version -> questions.addAll(
+                        ReadableResponseExport.questionsFromDefinition(objectMapper, version.getDefinitionJson(), seenKeys)));
+
+        List<ReadableResponseExport.Person> people = new ArrayList<>();
+        for (ResponseEntity response : submitted) {
+            IamMembershipProjectionEntity membership = response.getRespondentId() == null
+                    ? null
+                    : memberships
+                            .findByCompanyIdAndIamUserId(job.getCompanyId(), response.getRespondentId())
+                            .orElse(null);
+            Map<String, ResponseAnswerEntity> answers = new LinkedHashMap<>();
+            for (ResponseAnswerEntity answer : response.getAnswers()) {
+                answers.put(answer.getQuestionKey(), answer);
+            }
+            String name = membership == null ? "" : membership.getDisplayName();
+            if ((name == null || name.isBlank()) && response.getRespondentId() == null) {
+                name = "Anonymous";
+            }
+            people.add(new ReadableResponseExport.Person(
+                    membership == null ? "" : membership.getEmployeeId(),
+                    name,
+                    membership == null ? "" : membership.getDepartmentName(),
+                    membership == null ? "" : membership.getSubDepartmentName(),
+                    ReadableResponseExport.formatSubmitted(response.getSubmittedAt()),
+                    answers));
+        }
+        people.sort(Comparator.comparing(ReadableResponseExport.Person::department, Comparator.nullsLast(String::compareToIgnoreCase))
+                .thenComparing(ReadableResponseExport.Person::name, Comparator.nullsLast(String::compareToIgnoreCase))
+                .thenComparing(ReadableResponseExport.Person::employeeId, Comparator.nullsLast(String::compareToIgnoreCase)));
+        return ReadableResponseExport.grid(questions, people);
     }
 
-    private String buildCsv(List<ResponseEntity> submitted) {
-        StringBuilder csv = new StringBuilder("response_id,question_key,value_type,value\n");
-        for (ResponseEntity response : submitted) {
-            for (ResponseAnswerEntity answer : response.getAnswers()) {
-                csv.append(csvEscape(response.getId().toString()))
-                        .append(',')
-                        .append(csvEscape(answer.getQuestionKey()))
-                        .append(',')
-                        .append(csvEscape(answer.getValueType()))
-                        .append(',')
-                        .append(csvEscape(renderValue(answer)))
-                        .append('\n');
-            }
-        }
-        return csv.toString();
+    private List<ResponseEntity> loadSubmitted(UUID formRunId) {
+        return responses.findByFormRunIdAndStatus(formRunId, ResponseStatus.SUBMITTED);
     }
 
     private void storeCompleted(ExportJobEntity job, byte[] bytes, String contentType, String filename)
@@ -246,42 +279,6 @@ public class ExportApplicationService {
                 now));
         job.complete(file.getId(), now, now.plus(7, ChronoUnit.DAYS));
         exports.save(job);
-    }
-
-    private static String renderValue(ResponseAnswerEntity answer) {
-        if (answer.getTextValue() != null) {
-            return answer.getTextValue();
-        }
-        if (answer.getNumberValue() != null) {
-            return answer.getNumberValue().toString();
-        }
-        if (answer.getBooleanValue() != null) {
-            return answer.getBooleanValue().toString();
-        }
-        if (answer.getDateValue() != null) {
-            return answer.getDateValue().toString();
-        }
-        if (answer.getDatetimeValue() != null) {
-            return answer.getDatetimeValue().toString();
-        }
-        if (answer.getJsonValue() != null) {
-            return answer.getJsonValue();
-        }
-        if (answer.getObjectId() != null) {
-            return answer.getObjectId().toString();
-        }
-        return "";
-    }
-
-    private static String csvEscape(String value) {
-        if (value == null) {
-            return "";
-        }
-        String escaped = value.replace("\"", "\"\"");
-        if (escaped.contains(",") || escaped.contains("\"") || escaped.contains("\n")) {
-            return "\"" + escaped + "\"";
-        }
-        return escaped;
     }
 
     private ExportJobEntity requireExport(CurrentUser actor, UUID exportId) {
