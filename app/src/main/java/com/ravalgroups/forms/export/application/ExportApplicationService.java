@@ -152,8 +152,8 @@ public class ExportApplicationService {
                     default -> throw new DomainException("VALIDATION_ERROR", "Unsupported export format");
                 }
             } catch (Exception ex) {
-                log.warn("Export failed id={}: {}", job.getId(), ex.getMessage());
-                job.fail(ex.getMessage(), Instant.now());
+                log.warn("Export failed id={}: {}", job.getId(), ex.toString());
+                job.fail(ex.getClass().getSimpleName() + ": " + ex.getMessage(), Instant.now());
                 exports.save(job);
             }
         }

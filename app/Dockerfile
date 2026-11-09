@@ -6,14 +6,15 @@ RUN mvn -B -DskipTests package \
     && mv target/forms-*.jar target/app.jar
 
 FROM eclipse-temurin:21-jre-alpine
-RUN apk add --no-cache wget \
+RUN apk add --no-cache wget su-exec \
     && addgroup -S -g 10001 forms \
     && adduser -S -u 10001 -G forms forms
 WORKDIR /app
 COPY --from=build --chown=forms:forms /src/target/app.jar app.jar
-USER forms
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod 755 /docker-entrypoint.sh
 EXPOSE 8094
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0"
 HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=8 \
     CMD wget -qO- http://127.0.0.1:8094/actuator/health/liveness || exit 1
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
