@@ -47,8 +47,8 @@ Draft PATCH requires `expectedRevision`.
 
 ## Reporting / exports / files / invitations / share links
 
-- `GET /runs/{runId}/summary` — counts (`invited`, `started`, `submitted`, `inProgress`, `completionRate`)
-- `GET /runs/{runId}/respondents?status=IN_PROGRESS|SUBMITTED` — people list (default `IN_PROGRESS` = opened, not submitted); empty for anonymous runs
+- `GET /runs/{runId}/summary` — per-person counts (`invited`, `started`, `submitted`, `inProgress`, `completionRate`); reopen rows do not inflate totals
+- `GET /runs/{runId}/respondents?status=IN_PROGRESS|SUBMITTED` — one row per person (default `IN_PROGRESS` = opened, never submitted); empty for anonymous runs
 - `GET /runs/{runId}/questions/{questionId}/results`
 - `POST /runs/{runId}/exports`, `GET /exports/{id}`, `GET /exports/{id}/download` (CSV | XLSX | JSON)
 - `POST /files`, `GET /files/{id}/download`, `DELETE /files/{id}`

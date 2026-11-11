@@ -72,8 +72,21 @@ public class ResponseApplicationService {
             }
         }
 
-        UUID responseId = UuidV7.createOrUse(clientResponseId);
         UUID respondentId = resolveRespondentId(actor, run.getRespondentMode());
+        // Identified/pseudonymous: one open attempt per person — reuse latest in-progress row.
+        if (respondentId != null) {
+            var open = responses.findFirstByFormRunIdAndRespondentIdAndStatusOrderByUpdatedAtDesc(
+                    runId, respondentId, ResponseStatus.IN_PROGRESS);
+            if (open.isPresent()) {
+                return toView(open.get());
+            }
+            var any = responses.findFirstByFormRunIdAndRespondentIdOrderByStartedAtDesc(runId, respondentId);
+            if (any.isPresent() && any.get().getStatus() == ResponseStatus.SUBMITTED) {
+                return toView(any.get());
+            }
+        }
+
+        UUID responseId = UuidV7.createOrUse(clientResponseId);
         Instant now = Instant.now();
         ResponseEntity entity = ResponseEntity.start(
                 responseId,

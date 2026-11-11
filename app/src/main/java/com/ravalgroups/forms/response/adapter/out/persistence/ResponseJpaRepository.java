@@ -22,10 +22,30 @@ public interface ResponseJpaRepository extends JpaRepository<ResponseEntity, UUI
 
     List<ResponseEntity> findByFormRunIdAndStatus(UUID formRunId, ResponseStatus status);
 
+    List<ResponseEntity> findByFormRunId(UUID formRunId);
+
     Optional<ResponseEntity> findFirstByFormRunIdAndRespondentIdOrderByStartedAtDesc(
             UUID formRunId, UUID respondentId);
 
+    Optional<ResponseEntity> findFirstByFormRunIdAndRespondentIdAndStatusOrderByUpdatedAtDesc(
+            UUID formRunId, UUID respondentId, ResponseStatus status);
+
     List<ResponseEntity> findByFormRunIdInAndRespondentId(List<UUID> formRunIds, UUID respondentId);
+
+    @Query("""
+            select count(distinct r.respondentId) from ResponseEntity r
+            where r.formRunId = :runId and r.respondentId is not null
+            """)
+    long countDistinctRespondentsByFormRunId(@Param("runId") UUID runId);
+
+    @Query("""
+            select count(distinct r.respondentId) from ResponseEntity r
+            where r.formRunId = :runId
+              and r.respondentId is not null
+              and r.status = :status
+            """)
+    long countDistinctRespondentsByFormRunIdAndStatus(
+            @Param("runId") UUID runId, @Param("status") ResponseStatus status);
 
     @Query("""
             select r from ResponseEntity r

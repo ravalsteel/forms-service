@@ -74,16 +74,24 @@ public class ReportingApplicationService {
         FormRunEntity run = runs.requireRun(actor, runId);
         formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.VIEW);
         long invited = invitations.countByFormRunId(runId);
-        long started = responses.countByFormRunId(runId);
-        long submitted = responses.countByFormRunIdAndStatus(runId, ResponseStatus.SUBMITTED);
-        long inProgress = responses.countByFormRunIdAndStatus(runId, ResponseStatus.IN_PROGRESS);
+        // One person = one open: prefer distinct respondents when identities exist.
+        long startedPeople = responses.countDistinctRespondentsByFormRunId(runId);
+        long submittedPeople =
+                responses.countDistinctRespondentsByFormRunIdAndStatus(runId, ResponseStatus.SUBMITTED);
+        long startedRows = responses.countByFormRunId(runId);
+        long submittedRows = responses.countByFormRunIdAndStatus(runId, ResponseStatus.SUBMITTED);
+        boolean usePeople = startedPeople > 0;
+        long started = usePeople ? startedPeople : startedRows;
+        long submitted = usePeople ? submittedPeople : submittedRows;
+        // In progress = people who opened but never submitted (not every reopen row).
+        long inProgress = Math.max(0L, started - submitted);
         double completionRate = started == 0 ? 0.0 : (double) submitted / (double) started;
         return new RunSummaryView(run.getId(), invited, started, submitted, inProgress, completionRate);
     }
 
     /**
      * Lists respondents for a run filtered by response status. Default use: people who opened
-     * ({@link ResponseStatus#IN_PROGRESS}) but have not submitted.
+     * but have not submitted — one row per person even if they reopened many times.
      */
     @Transactional(readOnly = true)
     public List<RunRespondentView> respondents(CurrentUser actor, UUID runId, ResponseStatus status) {
@@ -94,9 +102,44 @@ public class ReportingApplicationService {
         if (run.getRespondentMode() == RespondentMode.ANONYMOUS) {
             return List.of();
         }
-        List<ResponseEntity> rows = responses.findByFormRunIdAndStatus(runId, filter);
-        List<RunRespondentView> out = new ArrayList<>(rows.size());
+        List<ResponseEntity> rows = responses.findByFormRunId(runId);
+        Map<UUID, ResponseEntity> submittedByPerson = new LinkedHashMap<>();
+        Map<UUID, ResponseEntity> inProgressByPerson = new LinkedHashMap<>();
         for (ResponseEntity response : rows) {
+            UUID personId = response.getRespondentId();
+            if (personId == null) {
+                continue;
+            }
+            if (response.getStatus() == ResponseStatus.SUBMITTED) {
+                ResponseEntity prev = submittedByPerson.get(personId);
+                if (prev == null
+                        || (response.getSubmittedAt() != null
+                                && (prev.getSubmittedAt() == null
+                                        || response.getSubmittedAt().isAfter(prev.getSubmittedAt())))) {
+                    submittedByPerson.put(personId, response);
+                }
+            } else if (response.getStatus() == ResponseStatus.IN_PROGRESS) {
+                ResponseEntity prev = inProgressByPerson.get(personId);
+                if (prev == null
+                        || response.getUpdatedAt().isAfter(prev.getUpdatedAt())) {
+                    inProgressByPerson.put(personId, response);
+                }
+            }
+        }
+
+        List<ResponseEntity> selected = new ArrayList<>();
+        if (filter == ResponseStatus.SUBMITTED) {
+            selected.addAll(submittedByPerson.values());
+        } else {
+            for (Map.Entry<UUID, ResponseEntity> entry : inProgressByPerson.entrySet()) {
+                if (!submittedByPerson.containsKey(entry.getKey())) {
+                    selected.add(entry.getValue());
+                }
+            }
+        }
+
+        List<RunRespondentView> out = new ArrayList<>(selected.size());
+        for (ResponseEntity response : selected) {
             IamMembershipProjectionEntity membership = response.getRespondentId() == null
                     ? null
                     : memberships
