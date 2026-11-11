@@ -47,7 +47,8 @@ Draft PATCH requires `expectedRevision`.
 
 ## Reporting / exports / files / invitations / share links
 
-- `GET /runs/{runId}/summary`
+- `GET /runs/{runId}/summary` — counts (`invited`, `started`, `submitted`, `inProgress`, `completionRate`)
+- `GET /runs/{runId}/respondents?status=IN_PROGRESS|SUBMITTED` — people list (default `IN_PROGRESS` = opened, not submitted); empty for anonymous runs
 - `GET /runs/{runId}/questions/{questionId}/results`
 - `POST /runs/{runId}/exports`, `GET /exports/{id}`, `GET /exports/{id}/download` (CSV | XLSX | JSON)
 - `POST /files`, `GET /files/{id}/download`, `DELETE /files/{id}`

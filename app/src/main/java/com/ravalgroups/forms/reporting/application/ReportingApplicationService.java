@@ -10,8 +10,11 @@ import com.ravalgroups.forms.form.definition.FormDefinitionValidator;
 import com.ravalgroups.forms.form.definition.FormDefinitionValidator.QuestionMeta;
 import com.ravalgroups.forms.form.domain.FormAccessLevel;
 import com.ravalgroups.forms.form.domain.QuestionTypes;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionEntity;
+import com.ravalgroups.forms.iam.adapter.out.persistence.IamMembershipProjectionJpaRepository;
 import com.ravalgroups.forms.invitation.adapter.out.persistence.InvitationJpaRepository;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseAnswerEntity;
+import com.ravalgroups.forms.response.adapter.out.persistence.ResponseEntity;
 import com.ravalgroups.forms.response.adapter.out.persistence.ResponseJpaRepository;
 import com.ravalgroups.forms.response.domain.ResponseStatus;
 import com.ravalgroups.forms.run.adapter.out.persistence.FormRunEntity;
@@ -19,6 +22,9 @@ import com.ravalgroups.forms.run.application.FormRunApplicationService;
 import com.ravalgroups.forms.run.domain.RespondentMode;
 import com.ravalgroups.forms.security.CurrentUser;
 import com.ravalgroups.forms.shared.exception.DomainException;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +40,7 @@ public class ReportingApplicationService {
     private final FormRunApplicationService runs;
     private final ResponseJpaRepository responses;
     private final InvitationJpaRepository invitations;
+    private final IamMembershipProjectionJpaRepository memberships;
     private final FormVersionJpaRepository versions;
     private final FormDefinitionValidator definitionValidator;
     private final FormsAuthorizationService authz;
@@ -44,6 +51,7 @@ public class ReportingApplicationService {
             FormRunApplicationService runs,
             ResponseJpaRepository responses,
             InvitationJpaRepository invitations,
+            IamMembershipProjectionJpaRepository memberships,
             FormVersionJpaRepository versions,
             FormDefinitionValidator definitionValidator,
             FormsAuthorizationService authz,
@@ -52,6 +60,7 @@ public class ReportingApplicationService {
         this.runs = runs;
         this.responses = responses;
         this.invitations = invitations;
+        this.memberships = memberships;
         this.versions = versions;
         this.definitionValidator = definitionValidator;
         this.authz = authz;
@@ -67,8 +76,62 @@ public class ReportingApplicationService {
         long invited = invitations.countByFormRunId(runId);
         long started = responses.countByFormRunId(runId);
         long submitted = responses.countByFormRunIdAndStatus(runId, ResponseStatus.SUBMITTED);
+        long inProgress = responses.countByFormRunIdAndStatus(runId, ResponseStatus.IN_PROGRESS);
         double completionRate = started == 0 ? 0.0 : (double) submitted / (double) started;
-        return new RunSummaryView(run.getId(), invited, started, submitted, completionRate);
+        return new RunSummaryView(run.getId(), invited, started, submitted, inProgress, completionRate);
+    }
+
+    /**
+     * Lists respondents for a run filtered by response status. Default use: people who opened
+     * ({@link ResponseStatus#IN_PROGRESS}) but have not submitted.
+     */
+    @Transactional(readOnly = true)
+    public List<RunRespondentView> respondents(CurrentUser actor, UUID runId, ResponseStatus status) {
+        authz.requireAnalystOrAdmin(actor);
+        FormRunEntity run = runs.requireRun(actor, runId);
+        formAccess.requireFormAccess(actor, run.getFormId(), FormAccessLevel.VIEW);
+        ResponseStatus filter = status == null ? ResponseStatus.IN_PROGRESS : status;
+        if (run.getRespondentMode() == RespondentMode.ANONYMOUS) {
+            return List.of();
+        }
+        List<ResponseEntity> rows = responses.findByFormRunIdAndStatus(runId, filter);
+        List<RunRespondentView> out = new ArrayList<>(rows.size());
+        for (ResponseEntity response : rows) {
+            IamMembershipProjectionEntity membership = response.getRespondentId() == null
+                    ? null
+                    : memberships
+                            .findByCompanyIdAndIamUserId(run.getCompanyId(), response.getRespondentId())
+                            .orElse(null);
+            String displayName = membership == null ? null : blankToNull(membership.getDisplayName());
+            if (displayName == null && response.getRespondentId() == null) {
+                displayName = "Anonymous";
+            }
+            out.add(new RunRespondentView(
+                    response.getId(),
+                    response.getRespondentId(),
+                    membership == null ? null : blankToNull(membership.getEmployeeId()),
+                    displayName,
+                    membership == null ? null : blankToNull(membership.getUsername()),
+                    membership == null ? null : blankToNull(membership.getEmail()),
+                    membership == null ? null : blankToNull(membership.getDepartmentName()),
+                    membership == null ? null : blankToNull(membership.getSubDepartmentName()),
+                    response.getStatus().name(),
+                    response.getStartedAt(),
+                    response.getSubmittedAt(),
+                    response.getUpdatedAt()));
+        }
+        out.sort(Comparator.comparing(RunRespondentView::displayName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
+                .thenComparing(RunRespondentView::employeeId, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
+                .thenComparing(RunRespondentView::startedAt, Comparator.nullsLast(Comparator.naturalOrder())));
+        return out;
+    }
+
+    private static String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @Transactional(readOnly = true)
@@ -247,7 +310,26 @@ public class ReportingApplicationService {
     }
 
     public record RunSummaryView(
-            UUID formRunId, long invited, long started, long submitted, double completionRate) {}
+            UUID formRunId,
+            long invited,
+            long started,
+            long submitted,
+            long inProgress,
+            double completionRate) {}
+
+    public record RunRespondentView(
+            UUID responseId,
+            UUID iamUserId,
+            String employeeId,
+            String displayName,
+            String username,
+            String email,
+            String departmentName,
+            String subDepartmentName,
+            String status,
+            Instant startedAt,
+            Instant submittedAt,
+            Instant updatedAt) {}
 
     public record QuestionResultsView(
             UUID questionId,
