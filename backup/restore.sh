@@ -2,27 +2,39 @@
 set -eu
 
 # Decrypt a dump and pg_restore into PGHOST.
-# Refuses production unless BACKUP_ALLOW_RESTORE=yes and you point PGHOST
-# at a throwaway Postgres (not iam-postgres / reminders-postgres / performance-postgres).
+# Refuses every production Postgres service unless you point PGHOST at a
+# throwaway database and set BACKUP_ALLOW_RESTORE=yes.
 
 if [ "${BACKUP_ALLOW_RESTORE:-}" != "yes" ]; then
     echo "Refusing restore. Set BACKUP_ALLOW_RESTORE=yes and PGHOST to a throwaway Postgres." >&2
     exit 1
 fi
 
-case "${PGHOST:-}" in
-    iam-postgres|reminders-postgres|performance-postgres|"")
-        echo "PGHOST=${PGHOST:-unset} looks like production. Point it at a disposable database." >&2
+host="${PGHOST:-}"
+if [ -z "$host" ]; then
+    echo "PGHOST is unset. Point it at a disposable database." >&2
+    exit 1
+fi
+
+refuse="${BACKUP_REFUSE_HOSTS:-iam-postgres,performance-postgres,reminders-postgres,forms-postgres,messaging-postgres,object-storage-postgres,inference-postgres}"
+old_ifs=$IFS
+IFS=,
+for blocked in $refuse; do
+    if [ "$host" = "$blocked" ]; then
+        echo "PGHOST=${host} looks like production. Point it at a disposable database." >&2
         exit 1
-        ;;
-esac
+    fi
+done
+IFS=$old_ifs
 
 : "${PGUSER:?}"
 : "${PGPASSWORD:?}"
 : "${PGDATABASE:?}"
+: "${BACKUP_PREFIX:?Set BACKUP_PREFIX}"
 : "${AGE_IDENTITY_FILE:?Mount secrets/backup/age.key as AGE_IDENTITY_FILE}"
 
-BACKUP_PREFIX="${BACKUP_PREFIX:-iam}"
+. /usr/local/bin/r2.sh
+
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 SOURCE="${1:-latest}"
 
@@ -63,22 +75,7 @@ resolve_source() {
     echo "$dest"
 }
 
-configure_rclone() {
-    account="${BACKUP_R2_ACCOUNT_ID:-}"
-    endpoint="${BACKUP_R2_ENDPOINT:-}"
-    if [ -z "$endpoint" ] && [ -n "$account" ]; then
-        endpoint="https://${account}.r2.cloudflarestorage.com"
-    fi
-    [ -z "$endpoint" ] && return 0
-    export RCLONE_CONFIG_R2_TYPE=s3
-    export RCLONE_CONFIG_R2_PROVIDER=Cloudflare
-    export RCLONE_CONFIG_R2_ACCESS_KEY_ID="${BACKUP_R2_ACCESS_KEY_ID:-}"
-    export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${BACKUP_R2_SECRET_ACCESS_KEY:-}"
-    export RCLONE_CONFIG_R2_ENDPOINT="$endpoint"
-    export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
-}
-
-configure_rclone
+configure_r2 || true
 age_file=$(resolve_source "$SOURCE")
 plain="${age_file%.age}"
 if [ "$plain" = "$age_file" ]; then

@@ -1,6 +1,6 @@
 # Postgres backups (3-2-1)
 
-Encrypted `pg_dump -Fc` nightly. Local copies on the host (last 2). Offsite copies in a dedicated Cloudflare R2 bucket (7 daily + 4 weekly). Use a **backups** bucket (not an uploads bucket).
+Encrypted `pg_dump -Fc` daily at 00:00 UTC (+6 minutes), straight to a dedicated Cloudflare R2 backups bucket (`BACKUP_R2_*`, not an uploads bucket). The scripts in this directory are the same in every service; database, prefix, and schedule come from compose. Local copies: last 2. Offsite: 7 daily plus 4 weekly.
 
 ```bash
 mkdir -p secrets/backup
