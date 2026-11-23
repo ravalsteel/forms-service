@@ -94,8 +94,7 @@ public final class FormsPermissionCode {
             RUNS_READ,
             RESPONSES_READ,
             RESPONSES_WRITE,
-            FILES_UPLOAD,
-            ROLES_READ);
+            FILES_UPLOAD);
 
     private FormsPermissionCode() {}
 }
